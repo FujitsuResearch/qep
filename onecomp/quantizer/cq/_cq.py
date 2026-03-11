@@ -30,7 +30,8 @@ class CQResult(QuantizationResult):
     When each_row=True, threshold/left_mean/right_mean have row-wise values.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         each_row (bool): Whether quantization was performed row-wise.
         quantized_weight (torch.Tensor, optional): Quantized weights (indices {0, 1}, INT8, CPU).
         threshold (torch.Tensor, optional): Clustering threshold (scalar or row-wise vector).
@@ -62,7 +63,8 @@ class CQ(Quantizer):
 
     Quantization method:
     - Sorts weights and finds the split point that minimizes SSE (Sum of Squared Errors)
-    - Uses the split point as a threshold to classify weights into two clusters (left_mean, right_mean)
+    - Uses the split point as a threshold to classify weights into two
+      clusters (left_mean, right_mean)
     - quantized_weight takes values {0, 1}, where 0 corresponds to left_mean and 1 to right_mean
 
     CQ does not require calibration data or Hessian matrix.

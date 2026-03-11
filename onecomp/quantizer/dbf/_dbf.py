@@ -34,7 +34,8 @@ class DBFResult(QuantizationResult):
     """DBF quantization result.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         target_bits (float): Target bit-width (e.g., 1.5).
         iters (int): Optimization iterations.
         reg (float): Regularization coefficient.
@@ -108,6 +109,38 @@ class DBF(Quantizer):
     balance_mode: str = "l1"
     use_adaptive_rho: bool = True
 
+    def validate_params(self):
+        """Validate DBF parameters once at quantizer initialization."""
+        bad = []
+
+        if self.target_bits is None or not isinstance(self.target_bits, (int, float)) or not (self.target_bits >= 1.0):
+            bad.append(
+                f"Invalid DBF parameter 'target_bits': {self.target_bits!r} (expected numeric >= 1.0)"
+            )
+
+        if not (isinstance(self.iters, int) and self.iters >= 1):
+            bad.append(
+                f"Invalid DBF parameter 'iters': {self.iters!r} (expected int >= 1)"
+            )
+
+        if not (isinstance(self.reg, (int, float)) and self.reg >= 0):
+            bad.append(
+                f"Invalid DBF parameter 'reg': {self.reg!r} (expected numeric >= 0.0)"
+            )
+
+        if not (isinstance(self.balance_iters, int) and self.balance_iters >= 1):
+            bad.append(
+                f"Invalid DBF parameter 'balance_iters': {self.balance_iters!r} (expected int >= 1)"
+            )
+
+        if not (isinstance(self.balance_alpha, (int, float)) and self.balance_alpha >= 1):
+            bad.append(
+                f"Invalid DBF parameter 'balance_alpha': {self.balance_alpha!r} (expected numeric >= 1.0)"
+            )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(
         self,
         module: torch.nn.modules,
@@ -165,7 +198,7 @@ class DBF(Quantizer):
         """Return quantization_config dict for save_quantized_model."""
         return {
             "quant_method": "dbf",
-            "target_bits": self.target_bits,
+            "bits": self.target_bits,
             "iters": self.iters,
             "reg": self.reg,
             "use_balancing": self.use_balancing,

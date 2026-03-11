@@ -26,7 +26,10 @@ def get_hadK(n, transpose=False):
         return None, 1
     # For non-power-of-2, we need special Hadamard matrices
     # This is a simplified version - full version would need all the had matrices
-    raise ValueError(f"Dimension {n} is not supported for Hadamard transform. Use incoh_mode='kron' instead.")
+    raise ValueError(
+        f"Dimension {n} is not supported for Hadamard transform. "
+        "Use incoh_mode='kron' instead."
+    )
 
 
 def matmul_hadU(X, transpose=False):

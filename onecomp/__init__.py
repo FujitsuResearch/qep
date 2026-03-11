@@ -13,3 +13,6 @@ from .runner import Runner
 from .quantizer import *
 from .log import setup_logger
 from .utils import *
+from .quantized_model_loader import QuantizedModelLoader
+
+load_quantized_model = QuantizedModelLoader.load_quantized_model

@@ -132,7 +132,9 @@ def create_gemlite_linear(
     
     except Exception as e:
         import warnings
-        warnings.warn(f"GemLite initialization failed: {e}. Falling back to standard implementation.")
+        warnings.warn(
+            f"GemLite initialization failed: {e}. Falling back to standard implementation."
+        )
         return None
 
 

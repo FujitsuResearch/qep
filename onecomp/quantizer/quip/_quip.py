@@ -27,11 +27,13 @@ class QUIPResult(QuantizationResult):
     Inherits from QuantizationResult and adds QUIP-specific parameters.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         wbits (int): Number of quantization bits used.
         percdamp (float): Damping coefficient used.
         incoh_mode (str): Incoherence mode used ("kron" or "had").
-        quantized_weight (torch.Tensor, optional): Quantized weights (INT type, CPU). Currently None.
+        quantized_weight (torch.Tensor, optional): Quantized weights (INT, CPU).
+            Currently None.
         scale (torch.Tensor, optional): Scale coefficients (FP16, CPU).
         zero (torch.Tensor, optional): Zero point (FP16, CPU).
         maxq (torch.Tensor, optional): Maximum quantization level.
