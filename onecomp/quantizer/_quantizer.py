@@ -165,6 +165,14 @@ class Quantizer(metaclass=ABCMeta):
 
         self.logger = getLogger(__name__)
 
+    def validate_params(self):
+        """Validate quantizer parameters.
+
+        Override in subclasses when parameter validation is required.
+
+        """
+        pass
+
     def quantize(
         self, module, input, output
     ):  # pylint: disable=redefined-builtin, unused-argument
@@ -409,6 +417,8 @@ class Quantizer(metaclass=ABCMeta):
 
         """
 
+        self.validate_params()
+
         assert len(self.module_to_name) == 0
 
         for name, module in model.named_modules():
@@ -460,7 +470,8 @@ class Quantizer(metaclass=ABCMeta):
         linear_module: Linear,
         **kwargs,
     ) -> Linear:
-        """Build an inference layer from one entry in quantizer.results (used by save_quantized_model).
+        """Build an inference layer from one entry in quantizer.results
+        (used by save_quantized_model).
 
         Override in quantizers that support save_quantized_model;
         call from_quantization_result on the method's inference layer class and return it.
@@ -480,6 +491,50 @@ class Quantizer(metaclass=ABCMeta):
             f"{type(self).__name__} does not support save_quantized_model. "
             "Override create_inference_layer() to enable saving."
         )
+
+    def apply_results_to_model(self, model, **kwargs):
+        """Replace Linear layers in model with quantized inference layers from self.results.
+
+        Call load_results(filepath) before this, or ensure self.results is already populated.
+        **kwargs are passed to create_inference_layer (e.g. pack_weights=True for GPTQ).
+
+        Args:
+            model (nn.Module): The model to modify (in place). Typically the base model
+                loaded with from_pretrained() so that state_dict keys match.
+
+        Returns:
+            None (modifies model in place)
+
+        Example:
+            >>> quantizer.load_results("quantization_results.pt")
+            >>> quantizer.apply_results_to_model(model, pack_weights=True)
+        """
+        for name in list(self.results):
+            result = self.results[name]
+            *parent_path, attr_name = name.split(".")
+            parent = model
+            for p in parent_path:
+                parent = getattr(parent, p)
+            linear_module = getattr(parent, attr_name)
+            quantized_layer = self.create_inference_layer(
+                result=result,
+                linear_module=linear_module,
+                **kwargs,
+            )
+            setattr(parent, attr_name, quantized_layer)
+            self.logger.debug("Replaced %s with %s", name, quantized_layer.__class__.__name__)
+        if self.results:
+            first_name = next(iter(self.results))
+            *parent_path, attr_name = first_name.split(".")
+            parent = model
+            for p in parent_path:
+                parent = getattr(parent, p)
+            layer_class_name = getattr(parent, attr_name).__class__.__name__
+            self.logger.info(
+                "Replaced %d Linear layers with %s",
+                len(self.results),
+                layer_class_name,
+            )
 
     def save_results(self, filepath):
         """Save the quantization results to a file.

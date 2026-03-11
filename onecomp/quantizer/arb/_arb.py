@@ -29,10 +29,12 @@ class ARBResult(QuantizationResult):
     Weight reconstruction: W = alpha[:, None] * quantized_weight + mu[:, None]
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         arb_iters (int): Number of ARB iterations used for quantization.
         split_points (int): Number of split points used for grouping non-salient weights.
-        quantized_weight (torch.Tensor, optional): Quantized weights (binary matrix {±1}, INT8, CPU).
+        quantized_weight (torch.Tensor, optional): Quantized weights
+            (binary matrix {±1}, INT8, CPU).
         alpha (torch.Tensor, optional): Row-wise scale coefficients (FP16, CPU).
         mu (torch.Tensor, optional): Row-wise bias (FP16, CPU).
     """

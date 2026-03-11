@@ -10,11 +10,12 @@ Copyright 2026 Fujitsu Ltd.
 Author: Keiji Kimura(kimura-keiji@fujitsu.com)
 """
 import logging
-logger = logging.getLogger(__name__)
 import torch
 import torch.nn as nn
 
 from .dbf_original import clear_dbf_meta, run_dbf_original
+
+logger = logging.getLogger(__name__)
 
 def _get_dbf_meta_in_op_space(weight_results):
     """
@@ -80,7 +81,7 @@ def svd_abs2(W):
 # ============================================================
 
 
-def run_dbf(
+def run_dbf(  # pylint: disable=too-many-positional-arguments
     hessian: torch.Tensor,
     layer: torch.nn.Module,
     target_bits: float = 1.5,
@@ -116,6 +117,7 @@ def run_dbf(
             - "dbf_Db": Output scaling matrix.
             - "is_dbf_quantized": Whether DBF quantization was applied.
     """
+
     # Enable TF32 for Ampere+ GPUs.
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -162,20 +164,20 @@ def run_dbf(
     results_5_stage = {
         "dequantized_weight": results_3_stage["dequantized_weight"],
         # Stage 0: Input scaling (right singular vector of A).
-        "dbf_Da": nn.Parameter(u_A.to(torch.float16), requires_grad=False),
+        "dbf_Da": nn.Parameter(u_A.to(dtype=torch.float16, device="cpu"), requires_grad=False),
         # Stage 1: Binary A matrix.
-        "dbf_A": binary_A,
+        "dbf_A": binary_A.to(dtype=torch.float16, device="cpu"),
         # Stage 2: Middle scaling.
-        "dbf_mid": nn.Parameter(scaling2.to(torch.float16), requires_grad=False),
+        "dbf_mid": nn.Parameter(scaling2.to(dtype=torch.float16, device="cpu"), requires_grad=False),
         # Stage 3: Binary B matrix.
-        "dbf_B": binary_B,
+        "dbf_B": binary_B.to(dtype=torch.float16, device="cpu"),
         # Stage 4: Output scaling (left singular vector of B).
-        "dbf_Db": nn.Parameter(v_B.to(torch.float16), requires_grad=False),
+        "dbf_Db": nn.Parameter(v_B.to(dtype=torch.float16, device="cpu"), requires_grad=False),
         "is_dbf_quantized": True,
     }
 
     # Temporary: keep metadata for PPL/Acc evaluation.
     if False:
         clear_dbf_meta(results_3_stage)
-    
+
     return results_5_stage

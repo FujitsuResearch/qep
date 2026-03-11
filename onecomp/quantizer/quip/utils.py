@@ -30,7 +30,11 @@ def gen_rand_orthos(m, p):
 
 
 def gen_rand_ortho_butterfly_noblock(n):
-    return ([gen_rand_orthos(1, p) for p in butterfly_factors(n)], torch.randperm(n), torch.randperm(n))
+    return (
+        [gen_rand_orthos(1, p) for p in butterfly_factors(n)],
+        torch.randperm(n),
+        torch.randperm(n),
+    )
 
 
 def mul_ortho_butterfly(Bpp, x):

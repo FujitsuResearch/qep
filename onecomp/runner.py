@@ -18,11 +18,15 @@ import torch
 
 from .model_config import ModelConfig
 from .quantizer import Quantizer
+from .quantizer.dbf import DBF
+from .quantizer.gptq import GPTQ
 from .utils import calculate_perplexity
 from .utils import calculate_accuracy as calc_accuracy
 from .utils import prepare_calibration_dataset as prepare_calib_dataset
 from .utils import capture_input_activations
 from .__version__ import __version__
+
+from pathlib import Path
 
 
 class Runner:
@@ -1260,8 +1264,6 @@ class Runner:
     # ========================================
     
     def save_quantized_model(self, save_directory: str, pack_weights: bool = True):
-        from pathlib import Path
-
         logger = self.logger
         logger.info("Saving quantized model to %s", save_directory)
 
@@ -1274,41 +1276,12 @@ class Runner:
 
         # Replace Linear layers with quantized layers using quantizer.results
         logger.info("Replacing Linear layers with quantized inference layers...")
-        replaced_count = 0
-        layer_class_name = None
+        self.quantizer.apply_results_to_model(model, pack_weights=pack_weights)
 
-        for name, module in list(model.named_modules()):
-            if name in self.quantizer.results:
-                result = self.quantizer.results[name]
-
-                # Get parent module and attribute name
-                *parent_path, attr_name = name.split('.')
-                parent = model
-                for p in parent_path:
-                    parent = getattr(parent, p)
-
-                # Get original Linear layer
-                linear_module = getattr(parent, attr_name)
-
-                # Quantizer creates inference layer from result
-                quantized_layer = self.quantizer.create_inference_layer(
-                    result=result,
-                    linear_module=linear_module,
-                    pack_weights=pack_weights,
-                    use_gemlite=False
-                )
-
-                # Replace the layer
-                setattr(parent, attr_name, quantized_layer)
-                layer_class_name = quantized_layer.__class__.__name__
-                replaced_count += 1
-                logger.info("Replaced %s with %s", name, layer_class_name)
-
-        if layer_class_name is not None:
-            logger.info("Replaced %d Linear layers with %s", replaced_count, layer_class_name)
-        else:
-            logger.info("Replaced %d Linear layers", replaced_count)
-        
+        # Build modules_in_block_to_quantize from actually-quantized layer names.
+        quantized_names = sorted(self.quantizer.results.keys())
+        modules_in_block = list(quantized_names)
+        quant_config["modules_in_block_to_quantize"] = modules_in_block
         # Add quantization config to model config
         model.config.quantization_config = quant_config
         

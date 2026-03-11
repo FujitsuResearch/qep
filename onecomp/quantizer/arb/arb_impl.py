@@ -139,7 +139,10 @@ def arb_quantize(
     mu = W.mean(dim=1, keepdim=True)  # [out, 1]
     
     if verbose:
-        logger.debug(f"[ARB] Initial mu stats: mean={mu.mean().item():.6f}, std={mu.std().item():.6f}")
+        logger.debug(
+            f"[ARB] Initial mu stats: mean={mu.mean().item():.6f}, "
+            f"std={mu.std().item():.6f}"
+        )
     
     # Step 2: ARB iteration (alternating optimization)
     for iteration in range(iters):
