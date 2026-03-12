@@ -558,7 +558,7 @@ class Runner:
             module.weight.data = (
                 self.quantizer.results[name].dequantized_weight.to(device).to(dtype)
             )
-            
+
             # 2-4. Free memory
             del quant_input_activation
 
@@ -1254,11 +1254,11 @@ class Runner:
                     quantizer.results[name].dequantized_weight.to(device).to(dtype)
                 )
                 logger.debug("Updated the model weights for layer: %s", name)
-                
+
     # ========================================
     # Unified Save/Load Methods (Using quantizer.results)
     # ========================================
-    
+
     def save_quantized_model(self, save_directory: str, pack_weights: bool = True):
         from pathlib import Path
 
@@ -1282,7 +1282,7 @@ class Runner:
                 result = self.quantizer.results[name]
 
                 # Get parent module and attribute name
-                *parent_path, attr_name = name.split('.')
+                *parent_path, attr_name = name.split(".")
                 parent = model
                 for p in parent_path:
                     parent = getattr(parent, p)
@@ -1295,7 +1295,7 @@ class Runner:
                     result=result,
                     linear_module=linear_module,
                     pack_weights=pack_weights,
-                    use_gemlite=False
+                    use_gemlite=False,
                 )
 
                 # Replace the layer
@@ -1308,17 +1308,17 @@ class Runner:
             logger.info("Replaced %d Linear layers with %s", replaced_count, layer_class_name)
         else:
             logger.info("Replaced %d Linear layers", replaced_count)
-        
+
         # Add quantization config to model config
         model.config.quantization_config = quant_config
-        
+
         # Save model and tokenizer
         save_path = Path(save_directory)
         save_path.mkdir(parents=True, exist_ok=True)
-        
+
         model.save_pretrained(save_directory)
         tokenizer.save_pretrained(save_directory)
-        
+
         logger.info(f"Quantized model saved to {save_directory}")
         return save_directory
 

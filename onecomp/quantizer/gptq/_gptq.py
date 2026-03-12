@@ -58,9 +58,9 @@ class GPTQResult(QuantizationResult):
     # Weight reconstruction data
     # =========================================
     quantized_weight: Optional[torch.Tensor] = None  # Quantized weights (INT type)
-    scale: Optional[torch.Tensor] = None             # Scale coefficients
-    zero: Optional[torch.Tensor] = None              # Zero points
-    perm: Optional[torch.Tensor] = None              # Column permutation order (actorder=True)
+    scale: Optional[torch.Tensor] = None  # Scale coefficients
+    zero: Optional[torch.Tensor] = None  # Zero points
+    perm: Optional[torch.Tensor] = None  # Column permutation order (actorder=True)
 
 
 @dataclass
@@ -135,10 +135,15 @@ class GPTQ(Quantizer):
     def create_inference_layer(self, result, linear_module, **kwargs):
         """Build GPTQLinear from GPTQResult."""
         from onecomp.quantizer.gptq.gptq_layer import GPTQLinear
+
         pack_weights = kwargs.get("pack_weights", True)
         return GPTQLinear.from_quantization_result(
             result=result,
-            bias=linear_module.bias if hasattr(linear_module, "bias") and linear_module.bias is not None else None,
+            bias=(
+                linear_module.bias
+                if hasattr(linear_module, "bias") and linear_module.bias is not None
+                else None
+            ),
             device=linear_module.weight.device,
             pack_weights=pack_weights,
             use_gemlite=kwargs.get("use_gemlite"),
@@ -232,21 +237,17 @@ def run_gptq(
 
             if groupsize != -1:
                 if (i1 + i) % groupsize == 0:
-                    quantizer.find_params(
-                        W[:, (i1 + i) : (i1 + i + groupsize)], weight=True
-                    )
+                    quantizer.find_params(W[:, (i1 + i) : (i1 + i + groupsize)], weight=True)
 
-            q_int = quantize(
-                w.unsqueeze(1), quantizer.scale, quantizer.zero, quantizer.maxq
-            )
-            
+            q_int = quantize(w.unsqueeze(1), quantizer.scale, quantizer.zero, quantizer.maxq)
+
             if q_int is not None:
                 q = dequantize(q_int, quantizer.scale, quantizer.zero, quantizer.maxq).flatten()
                 q_int = q_int.flatten()
             else:
                 w_expanded = w.unsqueeze(1)  # (out_features, 1)
                 q = quantize_trits(w_expanded, quantizer.scale, quantizer.zero).flatten()
-            
+
             Q1[:, i] = q
             if q_int is not None:
                 Q1_int[:, i] = q_int
@@ -334,12 +335,14 @@ def dequantize(
     """
     return scale * (quantized.float() - zero)
 
+
 def quantize_trits(
     x: torch.Tensor,
     scale: torch.Tensor,
     zero: torch.Tensor,
 ) -> torch.Tensor:
     return (x > scale / 2).float() * scale + (x < zero / 2).float() * zero
+
 
 class GPTQExcecutor(nn.Module):
 
@@ -419,12 +422,8 @@ class GPTQExcecutor(nn.Module):
                 xmin1 = p * xmin
                 xmax1 = p * xmax
                 scale1 = (xmax1 - xmin1) / self.maxq
-                zero1 = (
-                    torch.round(-xmin1 / scale1) if not self.sym else self.zero
-                )
-                q_int = quantize(
-                    x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq
-                )
+                zero1 = torch.round(-xmin1 / scale1) if not self.sym else self.zero
+                q_int = quantize(x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
                 if q_int is not None:
                     q = dequantize(q_int, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
                     q -= x

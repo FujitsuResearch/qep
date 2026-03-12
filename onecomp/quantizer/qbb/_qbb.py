@@ -38,19 +38,21 @@ class QBBResult(QuantizationResult):
             (each element is binary matrix {±1}, INT8, CPU).
         alpha_list (list[torch.Tensor], optional): List of scale coefficients for each binary basis (FP16, CPU).
     """
-    
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
     wbits: int = None
     iters_per_basis: int = None
     ste_type: str = None
-    
+
     # =========================================
     # Weight reconstruction data
     # =========================================
-    quantized_weight_list: Optional[list[torch.Tensor]] = None  # List of binary matrices (INT8, {±1})
-    alpha_list: Optional[list[torch.Tensor]] = None             # List of scale coefficients
+    quantized_weight_list: Optional[list[torch.Tensor]] = (
+        None  # List of binary matrices (INT8, {±1})
+    )
+    alpha_list: Optional[list[torch.Tensor]] = None  # List of scale coefficients
 
 
 @dataclass
@@ -120,7 +122,7 @@ class QBB(Quantizer):
             use_progressive_quantization=self.use_progressive_quantization,
             progressive_bits=self.progressive_bits,
         )
-        
+
         return QBBResult(
             dequantized_weight=result_dict["dequantized_weight"],
             wbits=self.wbits,

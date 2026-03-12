@@ -50,6 +50,7 @@ class DBFResult(QuantizationResult):
         dbf_B (Optional[torch.Tensor]): Binary B matrix.
         dbf_Db (Optional[torch.Tensor]): Scaling vector paired with B.
     """
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
@@ -90,7 +91,7 @@ class DBF(Quantizer):
         balance_alpha (float): Balancing alpha.
         balance_mode (str): Balancing mode (e.g., "l1").
         use_adaptive_rho (bool): Whether to adapt ADMM rho.
-    
+
     Methods:
         quantize_layer: Quantizes a given layer using DBF.
     """
@@ -178,6 +179,7 @@ class DBF(Quantizer):
     def create_inference_layer(self, result, linear_module, **kwargs):
         """Build DoubleBinaryLinear from DBFResult."""
         from onecomp.quantizer.dbf.dbf_layer import DoubleBinaryLinear
+
         bias = (
             linear_module.bias
             if hasattr(linear_module, "bias") and linear_module.bias is not None

@@ -21,6 +21,7 @@ logger = getLogger(__name__)
 # Optional GemLite integration
 try:
     from onecomp.quantizer.gemlite import create_gemlite_linear, is_gemlite_available
+
     HAS_GEMLITE_SUPPORT = True
 except ImportError:
     HAS_GEMLITE_SUPPORT = False
@@ -29,6 +30,7 @@ except ImportError:
 # ========================================
 # Bit packing / unpacking
 # ========================================
+
 
 def pack_int_weights(weights: torch.Tensor, wbits: int) -> torch.Tensor:
     """
@@ -55,11 +57,12 @@ def pack_int_weights(weights: torch.Tensor, wbits: int) -> torch.Tensor:
         flat = F.pad(flat, (0, pad_size), value=0)
 
     # Bit packing
-    packed = torch.zeros((flat.numel() // values_per_int32,), 
-                         device=flat.device, dtype=torch.int32)
+    packed = torch.zeros(
+        (flat.numel() // values_per_int32,), device=flat.device, dtype=torch.int32
+    )
     for i in range(values_per_int32):
-        packed += (flat[i::values_per_int32].int() << (i * wbits))
-    
+        packed += flat[i::values_per_int32].int() << (i * wbits)
+
     return packed
 
 
@@ -103,6 +106,7 @@ def unpack_int_weights(
 # GPTQ quantized Linear layer
 # ========================================
 
+
 class GPTQLinear(nn.Module):
     """
     GPTQ quantized Linear layer.
@@ -130,7 +134,7 @@ class GPTQLinear(nn.Module):
         bias: Bias (optional)
         use_gemlite: GemLite flag (None=auto)
     """
-    
+
     def __init__(
         self,
         in_features: int,
@@ -139,8 +143,8 @@ class GPTQLinear(nn.Module):
         groupsize: int,
         actorder: bool,
         quantized_weight: torch.Tensor,  # INT32, shape: (out_features, in_features)
-        scale: torch.Tensor,             # FP16
-        zero: torch.Tensor,              # FP16
+        scale: torch.Tensor,  # FP16
+        zero: torch.Tensor,  # FP16
         perm: Optional[torch.Tensor] = None,  # INT64
         bias: Optional[torch.Tensor] = None,
         device: str = "cuda",
@@ -148,23 +152,23 @@ class GPTQLinear(nn.Module):
         use_gemlite: Optional[bool] = None,  # GemLite flag
     ):
         super().__init__()
-        
+
         self.in_features = in_features
         self.out_features = out_features
         self.wbits = wbits
         self.groupsize = groupsize
         self.actorder = actorder
-        
+
         device = torch.device(device) if isinstance(device, str) else device
-        
+
         # Decide whether to use GemLite
         if use_gemlite is None:
             use_gemlite = (
-                HAS_GEMLITE_SUPPORT and
-                is_gemlite_available() and
-                not actorder and  # actorder not compatible with GemLite
-                groupsize > 0 and  # group quantization required
-                wbits in [2, 4, 8]  # supported bit widths
+                HAS_GEMLITE_SUPPORT
+                and is_gemlite_available()
+                and not actorder  # actorder not compatible with GemLite
+                and groupsize > 0  # group quantization required
+                and wbits in [2, 4, 8]  # supported bit widths
             )
 
         gemlite_layer = None
@@ -180,16 +184,13 @@ class GPTQLinear(nn.Module):
                 for i in range(num_groups):
                     start = i * groupsize
                     end = start + groupsize
-                    weight_dequant[:, start:end] = (
-                        scale[:, i:i+1] * (weight_dequant[:, start:end] - zero[:, i:i+1])
+                    weight_dequant[:, start:end] = scale[:, i : i + 1] * (
+                        weight_dequant[:, start:end] - zero[:, i : i + 1]
                     )
             weight_for_gemlite = weight_dequant.to(torch.float16)
 
             gemlite_layer = create_gemlite_linear(
-                weight_for_gemlite,
-                nbits=wbits,
-                group_size=groupsize,
-                device=device
+                weight_for_gemlite, nbits=wbits, group_size=groupsize, device=device
             )
 
         if gemlite_layer is not None:
@@ -210,11 +211,11 @@ class GPTQLinear(nn.Module):
             # Weight packing (memory efficiency)
             if pack_weights and wbits < 8:
                 packed_weight = pack_int_weights(quantized_weight, wbits)
-                self.register_buffer('packed_weight', packed_weight.to(device))
-                self.register_buffer('weight_shape', torch.tensor(quantized_weight.shape))
+                self.register_buffer("packed_weight", packed_weight.to(device))
+                self.register_buffer("weight_shape", torch.tensor(quantized_weight.shape))
                 self.quantized_weight = None  # Save memory
             else:
-                self.register_buffer('quantized_weight', quantized_weight.to(device))
+                self.register_buffer("quantized_weight", quantized_weight.to(device))
                 self.packed_weight = None
                 self.weight_shape = None
 
@@ -223,21 +224,21 @@ class GPTQLinear(nn.Module):
                 scale = scale.unsqueeze(1)
             if zero.dim() == 1:
                 zero = zero.unsqueeze(1)
-            self.register_buffer('scale', scale.to(torch.float16).to(device))
-            self.register_buffer('zero', zero.to(torch.float16).to(device))
+            self.register_buffer("scale", scale.to(torch.float16).to(device))
+            self.register_buffer("zero", zero.to(torch.float16).to(device))
 
         # Permutation order
         if perm is not None and actorder:
-            self.register_buffer('perm', perm.to(device))
+            self.register_buffer("perm", perm.to(device))
         else:
             self.perm = None
 
         # Bias
         if bias is not None:
-            self.register_buffer('bias', bias.to(torch.float16).to(device))
+            self.register_buffer("bias", bias.to(torch.float16).to(device))
         else:
             self.bias = None
-        
+
         # Group index (when groupsize != -1)
         if groupsize != -1 and not self.using_gemlite:
             if actorder and perm is not None:
@@ -246,10 +247,10 @@ class GPTQLinear(nn.Module):
                 g_idx = (invperm // groupsize).to(torch.int32).to(device)
             else:
                 g_idx = torch.arange(in_features, dtype=torch.int32, device=device) // groupsize
-            self.register_buffer('g_idx', g_idx, persistent=False)
+            self.register_buffer("g_idx", g_idx, persistent=False)
         else:
             self.g_idx = None
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
@@ -272,16 +273,14 @@ class GPTQLinear(nn.Module):
         # Unpack weights if packed
         if self.packed_weight is not None:
             weight_int = unpack_int_weights(
-                self.packed_weight, 
-                self.wbits, 
-                tuple(self.weight_shape.tolist())
+                self.packed_weight, self.wbits, tuple(self.weight_shape.tolist())
             )
         else:
             weight_int = self.quantized_weight
 
         # Dequantize: weight = scale * (weight_int - zero)
         if self.groupsize == -1:
-            # Per-channel: scale/zero shape is (out_features, 1) 
+            # Per-channel: scale/zero shape is (out_features, 1)
             weight = self.scale * (weight_int.float() - self.zero)
         else:
             scale_expanded = self.scale[:, self.g_idx]
@@ -293,9 +292,11 @@ class GPTQLinear(nn.Module):
         output = F.linear(x, weight, bias)
 
         return output
-        
+
     @classmethod
-    def from_quantization_result(cls, result, bias=None, device="cuda", pack_weights=True, use_gemlite=None):
+    def from_quantization_result(
+        cls, result, bias=None, device="cuda", pack_weights=True, use_gemlite=None
+    ):
         """
         Build GPTQLinear from GPTQResult (quantizer.results).
 
@@ -336,4 +337,3 @@ class GPTQLinear(nn.Module):
             pack_weights=pack_weights,
             use_gemlite=use_gemlite,
         )
-

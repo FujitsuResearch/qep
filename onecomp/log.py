@@ -9,9 +9,7 @@ Author: Keiji Kimura(kimura-keiji@fujitsu.com)
 from logging import getLogger, basicConfig
 
 
-def setup_logger(
-    level: str = "INFO", basic: str = "WARNING", filemode: str = "w", **kwargs
-):
+def setup_logger(level: str = "INFO", basic: str = "WARNING", filemode: str = "w", **kwargs):
     """Setup the logger
 
     Args:

@@ -9,12 +9,15 @@ Copyright 2026 Fujitsu Ltd.
 
 Author: Keiji Kimura(kimura-keiji@fujitsu.com)
 """
+
 import logging
+
 logger = logging.getLogger(__name__)
 import torch
 import torch.nn as nn
 
 from .dbf_original import clear_dbf_meta, run_dbf_original
+
 
 def _get_dbf_meta_in_op_space(weight_results):
     """
@@ -49,20 +52,20 @@ def power_iteration(A, num_iters=5):
     n = A.shape[1]
     v = torch.randn(n, device=A.device)
     v = v / torch.norm(v)
-    
+
     for _ in range(num_iters):
         u = torch.mv(A, v)
         u_norm = torch.norm(u)
         if u_norm == 0:
             break
         u = u / u_norm
-        
+
         v = torch.mv(A.t(), u)
         v_norm = torch.norm(v)
         if v_norm == 0:
             break
         v = v / v_norm
-    
+
     sigma = torch.norm(torch.mv(A, v))
     u = torch.mv(A, v) / (sigma + 1e-12)
     return u, sigma, v
@@ -74,6 +77,7 @@ def svd_abs2(W):
     Sg[Sg == 0] = 1
     u, s, v = power_iteration(W.abs(), num_iters=5)
     return u * s, Sg, v
+
 
 # ============================================================
 # Main: run_dbf
@@ -91,7 +95,7 @@ def run_dbf(
     balance_iters: int = 40,
     balance_alpha: float = 1.0,
     balance_mode: str = "l1",
-    use_adaptive_rho: bool = True
+    use_adaptive_rho: bool = True,
 ) -> dict:
     """Run the integrated DBF pipeline.
 
@@ -177,5 +181,5 @@ def run_dbf(
     # Temporary: keep metadata for PPL/Acc evaluation.
     if False:
         clear_dbf_meta(results_3_stage)
-    
+
     return results_5_stage

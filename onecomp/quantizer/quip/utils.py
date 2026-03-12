@@ -30,24 +30,28 @@ def gen_rand_orthos(m, p):
 
 
 def gen_rand_ortho_butterfly_noblock(n):
-    return ([gen_rand_orthos(1, p) for p in butterfly_factors(n)], torch.randperm(n), torch.randperm(n))
+    return (
+        [gen_rand_orthos(1, p) for p in butterfly_factors(n)],
+        torch.randperm(n),
+        torch.randperm(n),
+    )
 
 
 def mul_ortho_butterfly(Bpp, x):
-    (B, p_in, p_out) = Bpp
+    B, p_in, p_out = Bpp
     assert (len(x.shape) == 1) or (len(x.shape) == 2)
     orig_dim = 2
     if len(x.shape) == 1:
         (n,) = x.shape
         x = x.reshape(n, 1)
         orig_dim = 1
-    (n, q) = x.shape
+    n, q = x.shape
     x = x[p_in, :]
     pfn = tuple(butterfly_factors(n))
     for i in range(len(pfn)):
         mpfx = math.prod(pfn[0:i])
         p = pfn[i]
-        msfx = math.prod(pfn[(i + 1):])
+        msfx = math.prod(pfn[(i + 1) :])
         x = x.reshape(mpfx, p, msfx, q).permute(0, 2, 1, 3).reshape(mpfx * msfx, p, q)
         x = B[i] @ x
         x = x.reshape(mpfx, msfx, p, q).permute(0, 2, 1, 3).reshape(n, q)
@@ -59,4 +63,3 @@ def mul_ortho_butterfly(Bpp, x):
 
 def rand_ortho_butterfly_noblock(n):
     return mul_ortho_butterfly(gen_rand_ortho_butterfly_noblock(n), torch.eye(n))
-

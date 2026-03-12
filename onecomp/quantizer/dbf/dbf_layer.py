@@ -17,6 +17,7 @@ from typing import Optional
 # Optional GemLite integration
 try:
     from onecomp.quantizer.gemlite import create_gemlite_linear, is_gemlite_available
+
     HAS_GEMLITE_SUPPORT = True
 except ImportError:
     HAS_GEMLITE_SUPPORT = False
@@ -25,6 +26,7 @@ except ImportError:
 # ========================================
 # Bit packing / unpacking
 # ========================================
+
 
 def pack_binary(x: torch.Tensor) -> torch.Tensor:
     """Convert ±1 to {0,1} and pack 8:1 into uint8. Pad trailing with +1."""
@@ -37,7 +39,7 @@ def pack_binary(x: torch.Tensor) -> torch.Tensor:
     out = torch.zeros((flat.numel() // 8,), device=flat.device, dtype=torch.uint8)
     # Aggregate by bit position
     for i in range(8):
-        out += (flat[i::8] << (7 - i))
+        out += flat[i::8] << (7 - i)
     return out
 
 
@@ -53,10 +55,12 @@ def unpack_binary(x: torch.Tensor) -> torch.Tensor:
 # Basic components
 # ========================================
 
+
 class BitLinearPacked(nn.Module):
     """Packed binary matrix × input linear (fallback without GemLite).
-       If preunpack=True, unpack once at init and keep in memory (fast, more memory).
+    If preunpack=True, unpack once at init and keep in memory (fast, more memory).
     """
+
     def __init__(self, b: torch.Tensor, preunpack: bool = True):
         super().__init__()
         if b.ndim == 2:
@@ -91,6 +95,7 @@ class BitLinearPacked(nn.Module):
 # ========================================
 # DoubleBinaryLinear layer
 # ========================================
+
 
 class DoubleBinaryLinear(nn.Module):
     """DBF inference layer (5-stage implementation).
@@ -134,18 +139,12 @@ class DoubleBinaryLinear(nn.Module):
     ):
         super().__init__()
         # Stage 0: Input scaling
-        self.scaling0 = nn.Parameter(
-            dbf_Db.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling0 = nn.Parameter(dbf_Db.detach().to(torch.float16), requires_grad=False)
         # Stage 2: Middle scaling
         mid = dbf_mid.flatten() if dbf_mid.numel() > 1 else dbf_mid
-        self.scaling2 = nn.Parameter(
-            mid.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling2 = nn.Parameter(mid.detach().to(torch.float16), requires_grad=False)
         # Stage 4: Output scaling
-        self.scaling4 = nn.Parameter(
-            dbf_Da.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling4 = nn.Parameter(dbf_Da.detach().to(torch.float16), requires_grad=False)
 
         if use_gemlite is None:
             use_gemlite = HAS_GEMLITE_SUPPORT and is_gemlite_available()
@@ -171,13 +170,13 @@ class DoubleBinaryLinear(nn.Module):
 
         # Bias (from original Linear, if any)
         if bias is not None:
-            self.register_buffer('bias', bias.clone().to(torch.float16))
+            self.register_buffer("bias", bias.clone().to(torch.float16))
         else:
             self.bias = None
-        
+
         if device is not None:
             self.to(device)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """5-stage forward pass."""
         x = x * self.scaling0.to(x.dtype)
@@ -188,7 +187,7 @@ class DoubleBinaryLinear(nn.Module):
         if self.bias is not None:
             x = x + self.bias.to(x.dtype)
         return x
-    
+
     @classmethod
     def from_quantization_result(cls, result, bias=None, device=None, use_gemlite=None):
         """
@@ -214,4 +213,3 @@ class DoubleBinaryLinear(nn.Module):
             device=device,
             use_gemlite=use_gemlite,
         )
-
