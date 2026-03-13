@@ -6,3 +6,6 @@ models
 .hydra/
 *.out
 *.err
+md/*.md
+example/run_example.sh
+work/issue-*

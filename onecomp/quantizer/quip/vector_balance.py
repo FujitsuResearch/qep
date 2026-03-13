@@ -1,7 +1,7 @@
 """
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa
 """
 
 import torch
@@ -16,15 +16,20 @@ def check_nbits(wr, nbits):
     assert len(wr_vals) <= 2**nbits
     return wr_counts
 
+
 def hessian_loss(dw, H):
     return (dw @ H @ dw.T).trace()
+
 
 def calc_entropy(wr_counts):
     # empirical distribution of weights into bit patterns
     wr_dist = wr_counts / wr_counts.sum()
     logger.debug(wr_dist)
     # log(2) = 0.69... to convert from base e to bits
-    logger.debug("avg bits per weight: %f" % (torch.special.entr(wr_dist) / 0.69314718056).sum().item())
+    logger.debug(
+        "avg bits per weight: %f" % (torch.special.entr(wr_dist) / 0.69314718056).sum().item()
+    )
+
 
 def _allonce(x, w, unbiased=False):
     if unbiased:
@@ -34,7 +39,7 @@ def _allonce(x, w, unbiased=False):
     return w - z
 
 
-def round_allbal(
+def round_allbal(  # pylint: disable=too-many-positional-arguments
     w,
     H,
     nbits,
@@ -79,7 +84,7 @@ def round_allbal(
     return wr
 
 
-def round_allbal_block(
+def round_allbal_block(  # pylint: disable=too-many-positional-arguments
     w,
     H,
     nbits,
@@ -136,7 +141,9 @@ def round_allbal_block(
     return wr
 
 
-def round_sorted_ldlqRG(w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None):
+def round_sorted_ldlqRG(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None
+):
     p = torch.argsort(torch.diag(H))
     Hp = H[p, :][:, p]
     wp = w[:, p]
@@ -145,13 +152,17 @@ def round_sorted_ldlqRG(w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=No
     return wr
 
 
-def round_ldl(w, H, nbits, n_greedy_passes=9, unbiased=False):
+def round_ldl(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, n_greedy_passes=9, unbiased=False
+):
     """
     w in R^{m,d}
     d: input_shape, m: output_shape
     note: this has been updated with a (hopefully) more efficient LDL pass
     """
-    assert (not unbiased) or (n_greedy_passes == 0), "greedy passes are incompatible with unbiased LDL rounding"
+    assert (not unbiased) or (
+        n_greedy_passes == 0
+    ), "greedy passes are incompatible with unbiased LDL rounding"
     (d, d_) = H.shape
     assert d == d_
     (m, d) = w.shape
@@ -165,7 +176,9 @@ def round_ldl(w, H, nbits, n_greedy_passes=9, unbiased=False):
     w_hat = w.clone()
     for i in reversed(range(d)):
         w_hat[:, i] = torch.clamp(
-            torch.floor(w[:, i] + (w[:, i:] - w_hat[:, i:]) @ L[i:, i] + eta[:, i]), min=0, max=2**nbits - 1
+            torch.floor(w[:, i] + (w[:, i:] - w_hat[:, i:]) @ L[i:, i] + eta[:, i]),
+            min=0,
+            max=2**nbits - 1,
         )
 
     wr = w_hat.clone()
@@ -188,7 +201,9 @@ def round_ldl(w, H, nbits, n_greedy_passes=9, unbiased=False):
     return wr
 
 
-def round_sorted_ldlqRG_block(w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None):
+def round_sorted_ldlqRG_block(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None
+):
     p = torch.argsort(torch.diag(H))
     Hp = H[p, :][:, p]
     wp = w[:, p]
@@ -197,13 +212,17 @@ def round_sorted_ldlqRG_block(w, H, nbits, n_greedy_passes=9, unbiased=False, pi
     return wr
 
 
-def round_ldl_block(w, H, nbits, blocksize=128, n_greedy_passes=9, unbiased=False):
+def round_ldl_block(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, blocksize=128, n_greedy_passes=9, unbiased=False
+):
     """
     w in R^{m,d}
     d: input_shape, m: output_shape
     note: this has been updated with a (hopefully) more efficient LDL pass
     """
-    assert (not unbiased) or (n_greedy_passes == 0), "greedy passes are incompatible with unbiased LDL rounding"
+    assert (not unbiased) or (
+        n_greedy_passes == 0
+    ), "greedy passes are incompatible with unbiased LDL rounding"
     (d, d_) = H.shape
     assert d == d_
     (m, d) = w.shape
@@ -226,7 +245,9 @@ def round_ldl_block(w, H, nbits, blocksize=128, n_greedy_passes=9, unbiased=Fals
 
         for i in reversed(range(count)):
             WHat1[:, i] = torch.clamp(
-                torch.floor(W1[:, i] + (W1 - WHat1) @ L1[i1:i2, i] + W2Hdiff @ L1[i2:, i] + Eta1[:, i]),
+                torch.floor(
+                    W1[:, i] + (W1 - WHat1) @ L1[i1:i2, i] + W2Hdiff @ L1[i2:, i] + Eta1[:, i]
+                ),
                 min=0,
                 max=2**nbits - 1,
             )
@@ -268,7 +289,9 @@ def round_ldl_block(w, H, nbits, blocksize=128, n_greedy_passes=9, unbiased=Fals
     return wr
 
 
-def round_sorted_ldl_admm(w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None):
+def round_sorted_ldl_admm(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, n_greedy_passes=9, unbiased=False, pivot=None
+):
     p = torch.argsort(torch.diag(H))
     Hp = H[p, :][:, p]
     wp = w[:, p]
@@ -288,20 +311,30 @@ def ldlp_admm(H, rho=0.1, niters=100):
     W = torch.zeros(n, n, device=H.device)
     for ii in range(100):
         X = (((rho * Z - rho * W - 2 * MH) @ Linv.T) * M) @ Linv
-        C = torch.diag(1 / torch.max(torch.tensor(1.0, device=H.device), ((X + W).T @ (X + W)).diag().sqrt()))
+        C = torch.diag(
+            1
+            / torch.max(
+                torch.tensor(1.0, device=H.device),
+                ((X + W).T @ (X + W)).diag().sqrt(),
+            )
+        )
         Z = (X + W) @ C
         W = W + X - Z
-        objective = ((Z + torch.eye(n, device=H.device)) @ H @ (Z + torch.eye(n, device=H.device)).T).trace()
+        eye_n = torch.eye(n, device=H.device)
+        objective = ((Z + eye_n) @ H @ (Z + eye_n).T).trace()
         logger.debug(f"ldlp_admm iter {ii}: {objective}")
     return Z
 
 
-def round_ldl_admm(w, H, nbits, n_greedy_passes=9, unbiased=False):
+def round_ldl_admm(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, n_greedy_passes=9, unbiased=False
+):
     """
     w in R^{m,d}
     d: input_shape, m: output_shape
     """
-    # assert (not unbiased) or (n_greedy_passes == 0), "greedy passes are incompatible with unbiased LDL rounding"
+    # assert (not unbiased) or (n_greedy_passes == 0), (
+    #     "greedy passes are incompatible with unbiased LDL rounding")
     (d, d_) = H.shape
     assert d == d_
     (m, d) = w.shape
@@ -313,7 +346,11 @@ def round_ldl_admm(w, H, nbits, n_greedy_passes=9, unbiased=False):
         eta = 0.5 * torch.ones(w.shape).to(w.device)
     w_hat = torch.floor(w + eta)
     for i in range(d):
-        w_hat_next = torch.clamp(torch.floor(w_hat - (w_hat - w) @ L + eta), min=0, max=2**nbits - 1)
+        w_hat_next = torch.clamp(
+            torch.floor(w_hat - (w_hat - w) @ L + eta),
+            min=0,
+            max=2**nbits - 1,
+        )
         if (w_hat_next == w_hat).all():
             w_hat = w_hat_next
             logger.debug(i)
@@ -331,7 +368,11 @@ def round_ldl_admm(w, H, nbits, n_greedy_passes=9, unbiased=False):
         wr_target = w + (w - wr) @ (Hn * M.T)
         for ii in range(d):
             wr_prev = wr.clone()
-            wr = torch.clamp(torch.round(wr_target + (w - wr) @ HnM), min=0, max=2**nbits - 1)
+            wr = torch.clamp(
+                torch.round(wr_target + (w - wr) @ HnM),
+                min=0,
+                max=2**nbits - 1,
+            )
             if (wr == wr_prev).all():
                 logger.debug(f"triangle-greedy finished after {ii+1} steps")
                 break
@@ -345,7 +386,9 @@ def round_ldl_admm(w, H, nbits, n_greedy_passes=9, unbiased=False):
     return wr
 
 
-def round_ldl_gptqequiv(w, H, nbits, unbiased=False):
+def round_ldl_gptqequiv(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, unbiased=False
+):
     """
     w in R^{m,d}
     d: input_shape, m: output_shape
@@ -388,23 +431,31 @@ def round_ldl_gptqequiv(w, H, nbits, unbiased=False):
     return wr
 
 
-def round_vecbal_Hsort(w, H, nbits, npasses, unbiased=False, qmethod="ldlq", lazy_batch=False):
+def round_vecbal_Hsort(  # pylint: disable=too-many-positional-arguments
+    w, H, nbits, npasses, unbiased=False, qmethod="ldlq", lazy_batch=False
+):
     """
     permute in order of diagonal of hessian, heuristic trick
-    round with higher diag(H) first, corresponding vectors have larger magnitude
-    then use smaller vectors to correct for larger vectors
+    round with higher diag(H) first, corresponding vectors have larger
+    magnitude; then use smaller vectors to correct for larger vectors
     """
     # LDL has special Hsort function, opposite order
     if qmethod == "ldlq":
         if lazy_batch is False:
             return round_ldl(w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased)
         else:
-            return round_ldl_block(w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased)
+            return round_ldl_block(
+                w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased
+            )
     elif qmethod == "ldlqRG":
         if lazy_batch is False:
-            return round_sorted_ldlqRG(w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased)
+            return round_sorted_ldlqRG(
+                w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased
+            )
         else:
-            return round_sorted_ldlqRG_block(w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased)
+            return round_sorted_ldlqRG_block(
+                w.float(), H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased
+            )
     elif qmethod == "ldlbal_admm":
         return round_sorted_ldl_admm(w, H, nbits=nbits, n_greedy_passes=npasses, unbiased=unbiased)
     elif qmethod == "ldl_gptqequiv":
@@ -418,7 +469,9 @@ def round_vecbal_Hsort(w, H, nbits, npasses, unbiased=False, qmethod="ldlq", laz
             if lazy_batch is False:
                 wp_hat = round_allbal(wp, Hp, nbits=nbits, npasses=npasses, unbiased=unbiased)
             else:
-                wp_hat = round_allbal_block(wp, Hp, nbits=nbits, npasses=npasses, unbiased=unbiased)
+                wp_hat = round_allbal_block(
+                    wp, Hp, nbits=nbits, npasses=npasses, unbiased=unbiased
+                )
         # re-inverts order
         ip = torch.argsort(p)
         w_hat = wp_hat[:, ip]
@@ -426,7 +479,7 @@ def round_vecbal_Hsort(w, H, nbits, npasses, unbiased=False, qmethod="ldlq", laz
 
 
 @torch.no_grad()
-def quantize_weight_vecbal(
+def quantize_weight_vecbal(  # pylint: disable=too-many-positional-arguments
     w,
     H,
     nbits,
@@ -446,17 +499,32 @@ def quantize_weight_vecbal(
         # note: don't want to return wr.half() for comparison
     elif qfn == "a":
         wr_int = torch.clamp((w / scale) + zero, 0, maxq)
-        wr_int = round_vecbal_Hsort(wr_int, H, nbits, npasses, unbiased=unbiased, qmethod=qmethod, lazy_batch=lazy_batch)
+        wr_int = round_vecbal_Hsort(
+            wr_int,
+            H,
+            nbits,
+            npasses,
+            unbiased=unbiased,
+            qmethod=qmethod,
+            lazy_batch=lazy_batch,
+        )
         wr_dequant = scale * (wr_int - zero)
         return wr_dequant.half(), wr_int.int(), scale
     elif qfn == "b":
         scale_actual = 2.4 * w.square().mean().sqrt() + 1e-16
         wr = w / scale_actual
         wr_int = torch.clamp(((wr + 1) / 2) * maxq, 0, maxq)
-        wr_int = round_vecbal_Hsort(wr_int, H, nbits, npasses, unbiased=unbiased, qmethod=qmethod, lazy_batch=lazy_batch)
+        wr_int = round_vecbal_Hsort(
+            wr_int,
+            H,
+            nbits,
+            npasses,
+            unbiased=unbiased,
+            qmethod=qmethod,
+            lazy_batch=lazy_batch,
+        )
         wr_dequant = (wr_int / maxq) * 2 - 1
         wr_dequant = wr_dequant * scale_actual
         return wr_dequant.half(), wr_int.int(), scale_actual
     else:
         return NotImplementedError()
-

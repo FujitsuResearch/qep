@@ -7,9 +7,9 @@ Classes:
     OnebitResult: Result class for OneBit quantization containing quantized weights and parameters.
     Onebit: OneBit quantizer class that performs OneBit quantization.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 import torch
@@ -66,7 +66,7 @@ class Onebit(Quantizer):
         use_balancing (bool): Whether to apply weight balancing.
         balance_iters (int): Balancing iterations.
         balance_alpha (float): Balancing alpha.
-    
+
     Methods:
         quantize_layer(module, input, hessian): Quantizes a given layer and returns OnebitResult.
     """
@@ -77,9 +77,7 @@ class Onebit(Quantizer):
     balance_iters: int = 40
     balance_alpha: float = 1.0
 
-    def quantize_layer(
-        self, module, input, hessian
-    ):
+    def quantize_layer(self, module, input, hessian):
         """Quantize the layer.
 
         Args:

@@ -1,8 +1,8 @@
 """
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 
 """
 
@@ -165,6 +165,14 @@ class Quantizer(metaclass=ABCMeta):
 
         self.logger = getLogger(__name__)
 
+    def validate_params(self):
+        """Validate quantizer parameters.
+
+        Override in subclasses when parameter validation is required.
+
+        """
+        pass
+
     def quantize(
         self, module, input, output
     ):  # pylint: disable=redefined-builtin, unused-argument
@@ -206,6 +214,8 @@ class Quantizer(metaclass=ABCMeta):
         original_input_activation=None,
         percdamp=0.01,
         perccorr=0.5,
+        hessian=None,
+        delta_hatX=None,
     ):  # pylint: disable=too-many-arguments, too-many-positional-arguments
         """Quantize the layer with QEP
 
@@ -213,6 +223,8 @@ class Quantizer(metaclass=ABCMeta):
             module (torch.nn.Module): The layer module
             quant_input_activation (torch.Tensor): The input activations of the quantized layer
             original_input_activation (torch.Tensor): The input activations of the original layer
+            hessian (torch.Tensor): The Hessian matrix
+            delta_hatX (torch.Tensor): The cross-term matrix
         """
 
         name = self.module_to_name[module]
@@ -220,19 +232,18 @@ class Quantizer(metaclass=ABCMeta):
         start_time = time.time()
 
         # Calculate the Hessian matrix
-        if self.flag_hessian:
+        if hessian is None and self.flag_hessian:
             hessian = self.calculate_hessian(module, quant_input_activation)
-        else:
-            hessian = None
 
         # Adjust the weights to be quantized
-        if original_input_activation is not None:
+        if delta_hatX is not None or original_input_activation is not None:
             self.logger.info("Adjusting the weight of the layer: %s", name)
             self.adjust_weight(
                 module,
                 quant_input_activation,
                 original_input_activation,
                 original_hessian=hessian,
+                original_delta_hatX=delta_hatX,
                 percdamp=percdamp,
                 perccorr=perccorr,
             )
@@ -253,12 +264,11 @@ class Quantizer(metaclass=ABCMeta):
         torch.cuda.empty_cache()
 
         if self.calc_quant_error:
-            device = module.weight.device
             # Record quantization error
             self._record_quantization_error(
                 module,
                 name,
-                quant_input_activation.to(device),
+                quant_input_activation,
                 result,
             )
 
@@ -295,6 +305,7 @@ class Quantizer(metaclass=ABCMeta):
         quant_input_activation,
         original_input_activation,
         original_hessian=None,
+        original_delta_hatX=None,
         percdamp=0.01,
         perccorr=0.5,
     ):  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
@@ -315,9 +326,12 @@ class Quantizer(metaclass=ABCMeta):
             hessian = original_hessian.clone()
 
         # Calculate delta^T hat_X
-        delta_hatX = self.calculate_delta_hatX(
-            module, quant_input_activation, original_input_activation
-        )
+        if original_delta_hatX is None:
+            delta_hatX = self.calculate_delta_hatX(
+                module, quant_input_activation, original_input_activation
+            )
+        else:
+            delta_hatX = original_delta_hatX.clone()
 
         # Dead columns guard
         dead = torch.diag(hessian) == 0
@@ -409,6 +423,8 @@ class Quantizer(metaclass=ABCMeta):
 
         """
 
+        self.validate_params()
+
         assert len(self.module_to_name) == 0
 
         for name, module in model.named_modules():
@@ -460,7 +476,8 @@ class Quantizer(metaclass=ABCMeta):
         linear_module: Linear,
         **kwargs,
     ) -> Linear:
-        """Build an inference layer from one entry in quantizer.results (used by save_quantized_model).
+        """Build an inference layer from one entry in quantizer.results
+        (used by save_quantized_model).
 
         Override in quantizers that support save_quantized_model;
         call from_quantization_result on the method's inference layer class and return it.
@@ -480,6 +497,50 @@ class Quantizer(metaclass=ABCMeta):
             f"{type(self).__name__} does not support save_quantized_model. "
             "Override create_inference_layer() to enable saving."
         )
+
+    def apply_results_to_model(self, model, **kwargs):
+        """Replace Linear layers in model with quantized inference layers from self.results.
+
+        Call load_results(filepath) before this, or ensure self.results is already populated.
+        **kwargs are passed to create_inference_layer (e.g. pack_weights=True for GPTQ).
+
+        Args:
+            model (nn.Module): The model to modify (in place). Typically the base model
+                loaded with from_pretrained() so that state_dict keys match.
+
+        Returns:
+            None (modifies model in place)
+
+        Example:
+            >>> quantizer.load_results("quantization_results.pt")
+            >>> quantizer.apply_results_to_model(model, pack_weights=True)
+        """
+        for name in list(self.results):
+            result = self.results[name]
+            *parent_path, attr_name = name.split(".")
+            parent = model
+            for p in parent_path:
+                parent = getattr(parent, p)
+            linear_module = getattr(parent, attr_name)
+            quantized_layer = self.create_inference_layer(
+                result=result,
+                linear_module=linear_module,
+                **kwargs,
+            )
+            setattr(parent, attr_name, quantized_layer)
+            self.logger.debug("Replaced %s with %s", name, quantized_layer.__class__.__name__)
+        if self.results:
+            first_name = next(iter(self.results))
+            *parent_path, attr_name = first_name.split(".")
+            parent = model
+            for p in parent_path:
+                parent = getattr(parent, p)
+            layer_class_name = getattr(parent, attr_name).__class__.__name__
+            self.logger.info(
+                "Replaced %d Linear layers with %s",
+                len(self.results),
+                layer_class_name,
+            )
 
     def save_results(self, filepath):
         """Save the quantization results to a file.

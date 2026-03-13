@@ -6,9 +6,9 @@ Classes:
     ARBResult: Result class for ARB quantization containing quantized weights and parameters.
     ARB: ARB quantizer class that performs 1-bit binary quantization.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
@@ -29,26 +29,28 @@ class ARBResult(QuantizationResult):
     Weight reconstruction: W = alpha[:, None] * quantized_weight + mu[:, None]
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         arb_iters (int): Number of ARB iterations used for quantization.
         split_points (int): Number of split points used for grouping non-salient weights.
-        quantized_weight (torch.Tensor, optional): Quantized weights (binary matrix {±1}, INT8, CPU).
+        quantized_weight (torch.Tensor, optional): Quantized weights
+            (binary matrix {±1}, INT8, CPU).
         alpha (torch.Tensor, optional): Row-wise scale coefficients (FP16, CPU).
         mu (torch.Tensor, optional): Row-wise bias (FP16, CPU).
     """
-    
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
     arb_iters: int = None
     split_points: int = None
-    
+
     # =========================================
     # Weight reconstruction data
     # =========================================
     quantized_weight: Optional[torch.Tensor] = None  # Binary matrix (INT8, {±1})
-    alpha: Optional[torch.Tensor] = None             # Scale coefficient
-    mu: Optional[torch.Tensor] = None                # Bias
+    alpha: Optional[torch.Tensor] = None  # Scale coefficient
+    mu: Optional[torch.Tensor] = None  # Bias
 
 
 @dataclass
@@ -105,7 +107,7 @@ class ARB(Quantizer):
             split_points=self.split_points,
             verbose=self.verbose,
         )
-        
+
         return ARBResult(
             dequantized_weight=result_dict["dequantized_weight"],
             arb_iters=self.arb_iters,

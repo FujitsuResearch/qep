@@ -6,9 +6,9 @@ Classes:
     CQResult: Result class for CQ quantization containing quantized weights and parameters.
     CQ: CQ quantizer class that performs 2-value clustering quantization.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
@@ -30,26 +30,27 @@ class CQResult(QuantizationResult):
     When each_row=True, threshold/left_mean/right_mean have row-wise values.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         each_row (bool): Whether quantization was performed row-wise.
         quantized_weight (torch.Tensor, optional): Quantized weights (indices {0, 1}, INT8, CPU).
         threshold (torch.Tensor, optional): Clustering threshold (scalar or row-wise vector).
         left_mean (torch.Tensor, optional): Left cluster mean value (scalar or row-wise vector).
         right_mean (torch.Tensor, optional): Right cluster mean value (scalar or row-wise vector).
     """
-    
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
     each_row: bool = None
-    
+
     # =========================================
     # Weight reconstruction data
     # =========================================
     quantized_weight: Optional[torch.Tensor] = None  # Indices (INT8, {0, 1})
-    threshold: Optional[torch.Tensor] = None         # Threshold
-    left_mean: Optional[torch.Tensor] = None         # Left cluster mean
-    right_mean: Optional[torch.Tensor] = None        # Right cluster mean
+    threshold: Optional[torch.Tensor] = None  # Threshold
+    left_mean: Optional[torch.Tensor] = None  # Left cluster mean
+    right_mean: Optional[torch.Tensor] = None  # Right cluster mean
 
 
 @dataclass
@@ -62,7 +63,8 @@ class CQ(Quantizer):
 
     Quantization method:
     - Sorts weights and finds the split point that minimizes SSE (Sum of Squared Errors)
-    - Uses the split point as a threshold to classify weights into two clusters (left_mean, right_mean)
+    - Uses the split point as a threshold to classify weights into two
+      clusters (left_mean, right_mean)
     - quantized_weight takes values {0, 1}, where 0 corresponds to left_mean and 1 to right_mean
 
     CQ does not require calibration data or Hessian matrix.
@@ -100,7 +102,7 @@ class CQ(Quantizer):
             module,
             each_row=self.each_row,
         )
-        
+
         return CQResult(
             dequantized_weight=result_dict["dequantized_weight"],
             each_row=self.each_row,

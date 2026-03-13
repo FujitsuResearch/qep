@@ -1,8 +1,8 @@
 """
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa
 
 """
 
@@ -42,7 +42,7 @@ class QuantizerQFN(nn.Module):
         self.register_buffer("scale", torch.zeros(shape))
         self.register_buffer("zero", torch.zeros(shape))
 
-    def configure(
+    def configure(  # pylint: disable=too-many-positional-arguments
         self,
         bits,
         perchannel=False,

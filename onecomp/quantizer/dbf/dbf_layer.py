@@ -3,9 +3,9 @@ DBF (Double Binary Factorization) layer implementation.
 
 Efficient inference while keeping compatibility with the reference implementation.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa
 
 """
 
@@ -17,6 +17,7 @@ from typing import Optional
 # Optional GemLite integration
 try:
     from onecomp.quantizer.gemlite import create_gemlite_linear, is_gemlite_available
+
     HAS_GEMLITE_SUPPORT = True
 except ImportError:
     HAS_GEMLITE_SUPPORT = False
@@ -25,6 +26,7 @@ except ImportError:
 # ========================================
 # Bit packing / unpacking
 # ========================================
+
 
 def pack_binary(x: torch.Tensor) -> torch.Tensor:
     """Convert ±1 to {0,1} and pack 8:1 into uint8. Pad trailing with +1."""
@@ -37,7 +39,7 @@ def pack_binary(x: torch.Tensor) -> torch.Tensor:
     out = torch.zeros((flat.numel() // 8,), device=flat.device, dtype=torch.uint8)
     # Aggregate by bit position
     for i in range(8):
-        out += (flat[i::8] << (7 - i))
+        out += flat[i::8] << (7 - i)
     return out
 
 
@@ -53,11 +55,13 @@ def unpack_binary(x: torch.Tensor) -> torch.Tensor:
 # Basic components
 # ========================================
 
+
 class BitLinearPacked(nn.Module):
     """Packed binary matrix × input linear (fallback without GemLite).
-       If preunpack=True, unpack once at init and keep in memory (fast, more memory).
+    Unpacks bp on every forward pass.
     """
-    def __init__(self, b: torch.Tensor, preunpack: bool = True):
+
+    def __init__(self, b: torch.Tensor):
         super().__init__()
         if b.ndim == 2:
             self.shape = tuple(b.shape)
@@ -67,30 +71,17 @@ class BitLinearPacked(nn.Module):
             raise ValueError("BitLinearPacked: expected 2D ±1 tensor.")
 
         self.register_buffer("bp", bp)
-        self.register_parameter("scale", nn.Parameter(torch.ones(1)))
-
-        # Speed option: unpack once at init and keep
-        if preunpack:
-            unpacked = unpack_binary(self.bp)[: self._numel].reshape(self.shape).to(torch.int8)
-            self.register_buffer("bit_mat", unpacked)
-        else:
-            self.register_buffer("bit_mat", None)
 
     def forward(self, x):
-        if self.bit_mat is None:
-            # Slice to needed size then reshape
-            bit_mat = unpack_binary(self.bp)[: self._numel].reshape(self.shape)
-        else:
-            bit_mat = self.bit_mat
-        # Convert int8 to compute dtype and matmul
-        # Ensure dtype conversion to avoid BFloat16/float32 mismatch
-        weight_matrix = (bit_mat.to(x.dtype) * self.scale.to(x.dtype)).t()
-        return x.matmul(weight_matrix)
+        # Unpack, slice to needed size, reshape, and matmul
+        bit_mat = unpack_binary(self.bp)[: self._numel].reshape(self.shape)
+        return x.matmul(bit_mat.to(x.dtype).t())
 
 
 # ========================================
 # DoubleBinaryLinear layer
 # ========================================
+
 
 class DoubleBinaryLinear(nn.Module):
     """DBF inference layer (5-stage implementation).
@@ -121,7 +112,7 @@ class DoubleBinaryLinear(nn.Module):
         use_gemlite: GemLite flag (None=auto)
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-positional-arguments
         self,
         dbf_Da: torch.Tensor,
         dbf_A: torch.Tensor,
@@ -134,61 +125,64 @@ class DoubleBinaryLinear(nn.Module):
     ):
         super().__init__()
         # Stage 0: Input scaling
-        self.scaling0 = nn.Parameter(
-            dbf_Db.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling0 = nn.Parameter(dbf_Db.detach().to(torch.float16), requires_grad=False)
         # Stage 2: Middle scaling
         mid = dbf_mid.flatten() if dbf_mid.numel() > 1 else dbf_mid
-        self.scaling2 = nn.Parameter(
-            mid.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling2 = nn.Parameter(mid.detach().to(torch.float16), requires_grad=False)
         # Stage 4: Output scaling
-        self.scaling4 = nn.Parameter(
-            dbf_Da.detach().to(torch.float16), requires_grad=False
-        )
+        self.scaling4 = nn.Parameter(dbf_Da.detach().to(torch.float16), requires_grad=False)
+
+        self._bp1_shape = tuple(dbf_B.shape)
+        self._bp3_shape = tuple(dbf_A.shape)
+        self.register_buffer("bp1", pack_binary(dbf_B))
+        self.register_buffer("bp3", pack_binary(dbf_A))
 
         if use_gemlite is None:
             use_gemlite = HAS_GEMLITE_SUPPORT and is_gemlite_available()
 
+        self._gemlite_layers: dict = {}
+        self.use_gemlite = False
         if use_gemlite and HAS_GEMLITE_SUPPORT:
             device_obj = torch.device(device) if device else torch.device("cuda")
             gemlite1 = create_gemlite_linear(dbf_B, nbits=1, device=device_obj)
             gemlite3 = create_gemlite_linear(dbf_A, nbits=1, device=device_obj)
             if gemlite1 is not None and gemlite3 is not None:
-                self.binary_multiplication1 = gemlite1
-                self.binary_multiplication3 = gemlite3
-                self.using_gemlite = True
-            else:
-                self.binary_multiplication1 = BitLinearPacked(dbf_B, preunpack=True)
-                self.binary_multiplication3 = BitLinearPacked(dbf_A, preunpack=True)
-                self.using_gemlite = False
-        else:
-            # TODO: Verify later (wtfr)
-            # TODO: Temporarily modified to match the received model format
-            self.register_buffer("bp1", pack_binary(dbf_B))
-            self.register_buffer("bp3", pack_binary(dbf_A))
-            self.using_gemlite = False
+                self._gemlite_layers["1"] = gemlite1
+                self._gemlite_layers["3"] = gemlite3
+                self.use_gemlite = True
 
         # Bias (from original Linear, if any)
         if bias is not None:
-            self.register_buffer('bias', bias.clone().to(torch.float16))
+            self.register_buffer("bias", bias.clone().to(torch.float16))
         else:
             self.bias = None
-        
+
         if device is not None:
             self.to(device)
-    
+
+    def _unpack_bp(self, bp: torch.Tensor, shape: tuple) -> torch.Tensor:
+        """Unpack a packed binary buffer to {-1,+1} matrix."""
+        return unpack_binary(bp)[: shape[0] * shape[1]].reshape(shape)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """5-stage forward pass."""
         x = x * self.scaling0.to(x.dtype)
-        x = self.binary_multiplication1(x)
+        if self.use_gemlite:
+            x = self._gemlite_layers["1"](x)
+        else:
+            b1 = self._unpack_bp(self.bp1, self._bp1_shape)
+            x = x.matmul(b1.to(x.dtype).t())
         x = x * self.scaling2.to(x.dtype)
-        x = self.binary_multiplication3(x)
+        if self.use_gemlite:
+            x = self._gemlite_layers["3"](x)
+        else:
+            b3 = self._unpack_bp(self.bp3, self._bp3_shape)
+            x = x.matmul(b3.to(x.dtype).t())
         x = x * self.scaling4.to(x.dtype)
         if self.bias is not None:
             x = x + self.bias.to(x.dtype)
         return x
-    
+
     @classmethod
     def from_quantization_result(cls, result, bias=None, device=None, use_gemlite=None):
         """
@@ -215,3 +209,51 @@ class DoubleBinaryLinear(nn.Module):
             use_gemlite=use_gemlite,
         )
 
+    @classmethod
+    def from_saved_state(
+        cls,
+        layer_state_dict: dict,
+        in_features: int,
+        out_features: int,
+        empty: bool = False,
+    ):
+        """Build DoubleBinaryLinear from saved state_dict tensors.
+
+        Args:
+            layer_state_dict: Sub-state_dict for this layer
+                (keys: scaling0, scaling2, scaling4, bp1, bp3, bias).
+            in_features: Input feature size.
+            out_features: Output feature size.
+            empty: If True, create zero params/buffers of the same shape (for "replace then
+                load_state_dict" flow). If False, use tensors from layer_state_dict directly.
+
+        Returns:
+            DoubleBinaryLinear instance.
+        """
+        self = cls.__new__(cls)
+        nn.Module.__init__(self)
+
+        def _p(k):
+            t = layer_state_dict[k]
+            return torch.zeros_like(t) if empty else t
+
+        self.scaling0 = nn.Parameter(_p("scaling0"), requires_grad=False)
+        self.scaling2 = nn.Parameter(_p("scaling2"), requires_grad=False)
+        self.scaling4 = nn.Parameter(_p("scaling4"), requires_grad=False)
+
+        mid_dim = layer_state_dict["scaling2"].numel()
+        self._bp1_shape = (mid_dim, in_features)
+        self._bp3_shape = (out_features, mid_dim)
+        self.register_buffer("bp1", _p("bp1"))
+        self.register_buffer("bp3", _p("bp3"))
+
+        bias = layer_state_dict.get("bias")
+        if bias is not None:
+            self.register_buffer("bias", torch.zeros_like(bias) if empty else bias)
+        else:
+            self.bias = None
+
+        self.use_gemlite = False
+        self._gemlite_layers = {}
+
+        return self

@@ -2,9 +2,9 @@
 
 Example: Quantization using GPTQ(3bit)
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 
 """
 
@@ -15,8 +15,7 @@ setup_logger()
 
 # Prepare the model
 model_config = ModelConfig(
-    model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
-    device="cuda:0"
+    model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T", device="cuda:0"
 )
 
 # Configure the quantization method

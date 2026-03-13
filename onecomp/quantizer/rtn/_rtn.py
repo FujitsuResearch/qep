@@ -6,9 +6,9 @@ Classes:
     RTNResult: Result class for RTN quantization containing quantized weights and parameters.
     RTN: RTN quantizer class that performs round-to-nearest quantization.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
@@ -27,7 +27,8 @@ class RTNResult(QuantizationResult):
     Inherits from QuantizationResult and adds RTN-specific parameters.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         wbits (int): Number of quantization bits used.
         groupsize (int): Group size used (-1 means no grouping).
         sym (bool): Whether symmetric quantization was used.
@@ -47,8 +48,8 @@ class RTNResult(QuantizationResult):
     # Weight reconstruction data
     # =========================================
     quantized_weight: Optional[torch.Tensor] = None  # Quantized weights (INT type)
-    scale: Optional[torch.Tensor] = None             # Scale coefficient
-    zero: Optional[torch.Tensor] = None              # Zero point
+    scale: Optional[torch.Tensor] = None  # Scale coefficient
+    zero: Optional[torch.Tensor] = None  # Zero point
 
 
 @dataclass
@@ -93,11 +94,13 @@ class RTN(Quantizer):
 
         Args:
             module (torch.nn.Module): The layer module to quantize.
-            input (tuple or torch.Tensor, optional): Input tensor (not used in RTN). Default is None.
+            input (tuple or torch.Tensor, optional): Input tensor (not used
+                in RTN). Default is None.
             hessian (torch.Tensor, optional): Hessian matrix (not used in RTN). Default is None.
 
         Returns:
-            RTNResult: RTN quantization result object containing quantized weights and parameters.
+            RTNResult: RTN quantization result object containing quantized
+                weights and parameters.
         """
         result_dict = run_rtn(
             module,

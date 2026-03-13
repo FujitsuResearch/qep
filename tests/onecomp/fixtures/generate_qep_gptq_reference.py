@@ -4,9 +4,9 @@ QEP reference data generation script.
 Quantize TinyLlama with GPTQ+QEP and save the quantization errors as reference data.
 Run once before refactoring to generate baseline values for testing.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 
 Usage:
     python tests/onecomp/fixtures/generate_qep_gptq_reference.py
@@ -15,6 +15,7 @@ Usage:
 from pathlib import Path
 
 from onecomp import ModelConfig, Runner
+from onecomp.qep import QEPConfig
 from onecomp.quantizer.gptq import GPTQ
 from onecomp import setup_logger
 
@@ -45,7 +46,7 @@ def run_qep_gptq_quantization():
         calc_quant_error=True,
     )
 
-    # Create Runner with QEP enabled
+    # Create Runner with QEP enabled (generic implementation)
     runner = Runner(
         model_config=model_config,
         max_length=512,
@@ -54,6 +55,7 @@ def run_qep_gptq_quantization():
         calibration_seed=0,
         quantizer=quantizer,
         qep=True,
+        qep_config=QEPConfig(general=True),
     )
 
     # Run quantization

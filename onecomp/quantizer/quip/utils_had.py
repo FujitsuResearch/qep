@@ -1,7 +1,7 @@
 """
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa
 """
 
 import gc
@@ -26,7 +26,9 @@ def get_hadK(n, transpose=False):
         return None, 1
     # For non-power-of-2, we need special Hadamard matrices
     # This is a simplified version - full version would need all the had matrices
-    raise ValueError(f"Dimension {n} is not supported for Hadamard transform. Use incoh_mode='kron' instead.")
+    raise ValueError(
+        f"Dimension {n} is not supported for Hadamard transform. " "Use incoh_mode='kron' instead."
+    )
 
 
 def matmul_hadU(X, transpose=False):
@@ -81,4 +83,3 @@ def REVERSE_RHT_W(hatW, SU, SV):
 def REVERSE_RHT_H(hatH, SV):
     """Reverse Randomized Hadamard Transform for Hessian"""
     return matmul_hadU((matmul_hadU(hatH) * SV.unsqueeze(0)).T) * SV.unsqueeze(0)
-

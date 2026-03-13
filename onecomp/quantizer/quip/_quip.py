@@ -6,9 +6,9 @@ Classes:
     QUIPResult: Result class for QUIP quantization containing quantized weights and parameters.
     QUIP: QUIP quantizer class that performs quantization using incoherence processing.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
@@ -27,30 +27,32 @@ class QUIPResult(QuantizationResult):
     Inherits from QuantizationResult and adds QUIP-specific parameters.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         wbits (int): Number of quantization bits used.
         percdamp (float): Damping coefficient used.
         incoh_mode (str): Incoherence mode used ("kron" or "had").
-        quantized_weight (torch.Tensor, optional): Quantized weights (INT type, CPU). Currently None.
+        quantized_weight (torch.Tensor, optional): Quantized weights (INT, CPU).
+            Currently None.
         scale (torch.Tensor, optional): Scale coefficients (FP16, CPU).
         zero (torch.Tensor, optional): Zero point (FP16, CPU).
         maxq (torch.Tensor, optional): Maximum quantization level.
     """
-    
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
     wbits: int = None
     percdamp: float = None
     incoh_mode: str = None
-    
+
     # =========================================
     # Weight reconstruction data
     # =========================================
     quantized_weight: Optional[torch.Tensor] = None  # Quantized weights (INT type)
-    scale: Optional[torch.Tensor] = None             # Scale coefficient
-    zero: Optional[torch.Tensor] = None              # Zero point
-    maxq: Optional[torch.Tensor] = None              # Maximum quantization level
+    scale: Optional[torch.Tensor] = None  # Scale coefficient
+    zero: Optional[torch.Tensor] = None  # Zero point
+    maxq: Optional[torch.Tensor] = None  # Maximum quantization level
 
 
 @dataclass
@@ -102,7 +104,7 @@ class QUIP(Quantizer):
         """
         if hessian is None:
             hessian = self.calculate_hessian(module, input)
-        
+
         result_dict = run_quip(
             hessian,
             module,
@@ -110,7 +112,7 @@ class QUIP(Quantizer):
             wbits=self.wbits,
             incoh_mode=self.incoh_mode,
         )
-        
+
         return QUIPResult(
             dequantized_weight=result_dict["dequantized_weight"],
             wbits=self.wbits,

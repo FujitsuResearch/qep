@@ -5,12 +5,13 @@ QBB is a quantization method using multiple binary bases that represents weight 
 as linear combinations of multiple binary matrices with scale coefficients.
 
 Functions:
-    run_qbb(layer, wbits, iters_per_basis, lr, ste_type, use_progressive_quantization, progressive_bits):
+    run_qbb(layer, wbits, iters_per_basis, lr, ste_type,
+            use_progressive_quantization, progressive_bits):
         Execute QBB quantization on a layer.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa
 """
 
 from typing import Optional
@@ -28,7 +29,7 @@ logger = getLogger(__name__)
 
 def ste_sign(x):
     """Straight-Through Estimator for sign function
-    
+
     Forward: sign(x)
     Backward: gradient passes through if |x| <= 1, else 0
     """
@@ -46,7 +47,7 @@ def identity_ste(x):
 
 def tanh_ste(x, k=1.0):
     """Tanh-based STE for smoother gradients
-    
+
     Forward: sign(x)
     Backward: k * (1 - tanh^2(k*x))
     """
@@ -56,7 +57,7 @@ def tanh_ste(x, k=1.0):
     return y
 
 
-def qbb_layerwise(
+def qbb_layerwise(  # pylint: disable=too-many-positional-arguments
     W: torch.Tensor,
     N: int = 4,
     iters_per_basis: int = 1000,
@@ -195,7 +196,7 @@ def qbb_layerwise(
     return B_final, A_final
 
 
-def run_qbb(
+def run_qbb(  # pylint: disable=too-many-positional-arguments
     layer: torch.nn.Module,
     wbits: int = 4,
     iters_per_basis: int = 1000,
@@ -219,7 +220,8 @@ def run_qbb(
     Args:
         layer (torch.nn.Module): Layer module to quantize (Linear, Conv2d, Conv1D, etc.).
         wbits (int, optional): Number of quantization bits (number of binary bases). Default is 4.
-        iters_per_basis (int, optional): Number of optimization iterations per basis. Default is 1000.
+        iters_per_basis (int, optional): Number of optimization iterations
+            per basis. Default is 1000.
         lr (float, optional): Learning rate. Used for gradient-based optimization. Default is 1e-4.
         ste_type (str, optional): Type of Straight-Through Estimator.
             Choose from "clipped", "identity", "tanh". Default is "clipped".
@@ -232,8 +234,10 @@ def run_qbb(
     Returns:
         dict[str, torch.Tensor | list[torch.Tensor]]: Dictionary containing quantization results
             with the following keys:
-            - "dequantized_weight": Dequantized weights (original shape, original dtype, CPU).
-            - "quantized_weight_list": List of quantized weights (each element is binary matrix {±1}, INT8, CPU).
+            - "dequantized_weight": Dequantized weights (original shape,
+              original dtype, CPU).
+            - "quantized_weight_list": List of quantized weights (each element
+              is binary matrix {±1}, INT8, CPU).
             - "alpha_list": List of scale coefficients for each binary basis (FP16, CPU).
     """
     # In QBB, number of bits = number of binary bases
@@ -250,7 +254,9 @@ def run_qbb(
     # Optional: Progressive quantization (quantize to higher bits first)
     progressive_W = None
     if use_progressive_quantization:
-        logger.debug(f"[QBB] Using progressive quantization: FP16 -> {progressive_bits}bit -> binary")
+        logger.debug(
+            f"[QBB] Using progressive quantization: FP16 -> {progressive_bits}bit -> binary"
+        )
         # Simple uniform quantization for progressive target
         scale = W.abs().max() / (2 ** (progressive_bits - 1) - 1)
         progressive_W = torch.round(W / scale) * scale
@@ -270,11 +276,11 @@ def run_qbb(
     # Reconstruct quantized weights
     with torch.no_grad():
         Q = sum(alpha.unsqueeze(0) * B for alpha, B in zip(alpha_list, B_list))
-        
+
         # Calculate and report error before transforming Q back to original shape
         error = ((W - Q) ** 2).sum().item()
         logger.debug(f"[QBB] Quantization complete. Reconstruction error: {error:.6f}")
-        
+
         # Convert binary matrices to integer type (int8, {±1})
         B_int_list = [B.to(torch.int8) for B in B_list]
 
@@ -297,4 +303,3 @@ def run_qbb(
         "quantized_weight_list": quantized_weight_list,
         "alpha_list": alpha_list_cpu,
     }
-

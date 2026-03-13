@@ -1,17 +1,15 @@
 """
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 
 """
 
 from logging import getLogger, basicConfig
 
 
-def setup_logger(
-    level: str = "INFO", basic: str = "WARNING", filemode: str = "w", **kwargs
-):
+def setup_logger(level: str = "INFO", basic: str = "WARNING", filemode: str = "w", **kwargs):
     """Setup the logger
 
     Args:

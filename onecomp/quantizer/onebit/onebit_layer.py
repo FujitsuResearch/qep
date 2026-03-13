@@ -3,6 +3,10 @@ OneBit Layer implementation
 
 Inference implementation for OneBit quantized Linear layers.
 W ≈ a ⊙ sign(W) ⊙ b^T
+
+Copyright 2025-2026 Fujitsu Ltd.
+
+Author: Yuma Ichikawa
 """
 
 import traceback
@@ -23,9 +27,7 @@ def my_pack(x: torch.Tensor) -> torch.Tensor:
     pad = (-flat.numel()) % 8
     if pad:
         flat = F.pad(flat, (0, pad), value=1)
-    out = torch.zeros(
-        (flat.numel() // 8,), device=flat.device, dtype=torch.uint8
-    )
+    out = torch.zeros((flat.numel() // 8,), device=flat.device, dtype=torch.uint8)
     for i in range(8):
         out += flat[i::8] << (7 - i)
     return out
@@ -142,9 +144,7 @@ class OneBitLinear(nn.Module):
         return out
 
     def extra_repr(self) -> str:
-        preunpack_status = (
-            "preunpacked" if self.sign_matrix is not None else "packed"
-        )
+        preunpack_status = "preunpacked" if self.sign_matrix is not None else "packed"
         return f"in_features={self.in_features}, out_features={self.out_features},\
               bias={self.bias is not None}, mode={preunpack_status}"
 
@@ -182,11 +182,7 @@ def replace_linear_with_onebit_layer(
         sign = module.weight.sign.clone()
 
         # Get bias
-        bias = (
-            module.bias.clone()
-            if hasattr(module, "bias") and module.bias is not None
-            else None
-        )
+        bias = module.bias.clone() if hasattr(module, "bias") and module.bias is not None else None
 
         # Create OneBitLinear layer (with bit packing support)
         onebit_layer = OneBitLinear(a, b, sign, bias, preunpack=preunpack)
@@ -194,9 +190,7 @@ def replace_linear_with_onebit_layer(
         # Move to the original device
         onebit_layer = onebit_layer.to(module.weight.device)
 
-        print(
-            f"[OneBit] Created OneBitLinear layer: {module.out_features}x{module.in_features}"
-        )
+        print(f"[OneBit] Created OneBitLinear layer: {module.out_features}x{module.in_features}")
 
         return onebit_layer
 
@@ -252,30 +246,20 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
                     onebit_weights[f"{prefix}.b"] = submodule.b.cpu().clone()
 
                     # Sign matrix (packed)
-                    onebit_weights[f"{prefix}.sign_packed"] = (
-                        submodule.sign_packed.cpu().clone()
-                    )
+                    onebit_weights[f"{prefix}.sign_packed"] = submodule.sign_packed.cpu().clone()
 
                     # Metadata (for reconstruction)
-                    onebit_weights[f"{prefix}.out_features"] = torch.tensor(
-                        submodule.out_features
-                    )
-                    onebit_weights[f"{prefix}.in_features"] = torch.tensor(
-                        submodule.in_features
-                    )
+                    onebit_weights[f"{prefix}.out_features"] = torch.tensor(submodule.out_features)
+                    onebit_weights[f"{prefix}.in_features"] = torch.tensor(submodule.in_features)
 
                     # Bias (if present)
                     if submodule.bias is not None:
-                        onebit_weights[f"{prefix}.bias"] = (
-                            submodule.bias.cpu().clone()
-                        )
+                        onebit_weights[f"{prefix}.bias"] = submodule.bias.cpu().clone()
 
                     found_count += 1
 
                 except Exception as e:
-                    print(
-                        f"[OneBit] Error extracting weights for {current_path}: {e}"
-                    )
+                    print(f"[OneBit] Error extracting weights for {current_path}: {e}")
 
                     traceback.print_exc()
 
@@ -291,12 +275,8 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
                         prefix = f"model.layers.{layer_idx}.{current_path}"
 
                         # Extract metadata
-                        onebit_weights[f"{prefix}.a"] = (
-                            submodule.weight.a.cpu().clone()
-                        )
-                        onebit_weights[f"{prefix}.b"] = (
-                            submodule.weight.b.cpu().clone()
-                        )
+                        onebit_weights[f"{prefix}.a"] = submodule.weight.a.cpu().clone()
+                        onebit_weights[f"{prefix}.b"] = submodule.weight.b.cpu().clone()
 
                         # Pack the sign matrix
                         sign = submodule.weight.sign.cpu()
@@ -307,33 +287,24 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
                         onebit_weights[f"{prefix}.sign_packed"] = sign_packed
 
                         # Metadata
-                        onebit_weights[f"{prefix}.out_features"] = (
-                            torch.tensor(submodule.out_features)
+                        onebit_weights[f"{prefix}.out_features"] = torch.tensor(
+                            submodule.out_features
                         )
                         onebit_weights[f"{prefix}.in_features"] = torch.tensor(
                             submodule.in_features
                         )
 
                         # Bias
-                        if (
-                            hasattr(submodule, "bias")
-                            and submodule.bias is not None
-                        ):
-                            onebit_weights[f"{prefix}.bias"] = (
-                                submodule.bias.cpu().clone()
-                            )
+                        if hasattr(submodule, "bias") and submodule.bias is not None:
+                            onebit_weights[f"{prefix}.bias"] = submodule.bias.cpu().clone()
 
                         found_count += 1
 
                     except Exception as e:
-                        print(
-                            f"[OneBit] Error extracting weights for {current_path}: {e}"
-                        )
+                        print(f"[OneBit] Error extracting weights for {current_path}: {e}")
 
             # Recursively search child modules
-            found_count += find_onebit_modules(
-                submodule, layer_idx, current_path
-            )
+            found_count += find_onebit_modules(submodule, layer_idx, current_path)
 
         return found_count
 

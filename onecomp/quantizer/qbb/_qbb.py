@@ -6,9 +6,9 @@ Classes:
     QBBResult: Result class for QBB quantization containing quantized weights and parameters.
     QBB: QBB quantizer class that performs quantization using multiple binary bases.
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
@@ -30,35 +30,37 @@ class QBBResult(QuantizationResult):
     When wbits=N, N binary matrices are used.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU) - inherited from parent class.
+        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
+            - inherited from parent class.
         wbits (int): Number of quantization bits (number of binary bases) used.
         iters_per_basis (int): Number of optimization iterations per basis used.
         ste_type (str): Type of Straight-Through Estimator used.
-        quantized_weight_list (list[torch.Tensor], optional): List of quantized weights
-            (each element is binary matrix {±1}, INT8, CPU).
-        alpha_list (list[torch.Tensor], optional): List of scale coefficients for each binary basis (FP16, CPU).
+        quantized_weight_list (list[torch.Tensor], optional): List of
+            quantized weights (each element is binary matrix {±1}, INT8, CPU).
+        alpha_list (list[torch.Tensor], optional): List of scale coefficients
+            for each binary basis (FP16, CPU).
     """
-    
+
     # =========================================
     # Quantization configuration parameters
     # =========================================
     wbits: int = None
     iters_per_basis: int = None
     ste_type: str = None
-    
+
     # =========================================
     # Weight reconstruction data
     # =========================================
-    quantized_weight_list: Optional[list[torch.Tensor]] = None  # List of binary matrices (INT8, {±1})
-    alpha_list: Optional[list[torch.Tensor]] = None             # List of scale coefficients
+    quantized_weight_list: Optional[list[torch.Tensor]] = None  # binary (INT8, ±1)
+    alpha_list: Optional[list[torch.Tensor]] = None  # List of scale coefficients
 
 
 @dataclass
 class QBB(Quantizer):
     """QBB (Quantized Binary Bases) quantizer.
 
-    QBB is a quantization method using multiple binary bases that represents weight matrices
-    as linear combinations of multiple binary matrices with scale coefficients.
+    QBB is a quantization method using multiple binary bases that represents
+    weight matrices as linear combinations of binary matrices with scale coefs.
     Optimizes each binary basis and scale coefficient using gradient-based optimization.
 
     Quantization method:
@@ -105,11 +107,13 @@ class QBB(Quantizer):
 
         Args:
             module (torch.nn.Module): The layer module to quantize.
-            input (tuple or torch.Tensor, optional): Input tensor (not used in QBB). Default is None.
+            input (tuple or torch.Tensor, optional): Input tensor (not used
+                in QBB). Default is None.
             hessian (torch.Tensor, optional): Hessian matrix (not used in QBB). Default is None.
 
         Returns:
-            QBBResult: QBB quantization result object containing quantized weights and parameters.
+            QBBResult: QBB quantization result object containing quantized
+                weights and parameters.
         """
         result_dict = run_qbb(
             module,
@@ -120,7 +124,7 @@ class QBB(Quantizer):
             use_progressive_quantization=self.use_progressive_quantization,
             progressive_bits=self.progressive_bits,
         )
-        
+
         return QBBResult(
             dequantized_weight=result_dict["dequantized_weight"],
             wbits=self.wbits,

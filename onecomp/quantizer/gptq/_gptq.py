@@ -1,18 +1,19 @@
 """
 
-Copyright 2026 Fujitsu Ltd.
+Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Keiji Kimura(kimura-keiji@fujitsu.com)
+Author: Yuma Ichikawa, Keiji Kimura
 
 """
 
 from dataclasses import dataclass
 from typing import Optional
 
-import torch
-import torch.nn as nn
-import transformers
 import gc
+
+import torch
+from torch import nn
+from transformers import Conv1D
 
 from onecomp.quantizer._quantizer import Quantizer, QuantizationResult
 
@@ -33,9 +34,9 @@ class GPTQResult(QuantizationResult):
         sym: Whether symmetric quantization was used.
 
         [Weight reconstruction data]
-        quantized_weight: Quantized weights (INT type, CPU).
-        scale: Scale coefficients (FP16, CPU).
-        zero: Zero points (FP16, CPU).
+        qweight: Quantized weights (INT type, CPU).
+        scales: Scale coefficients (FP16, CPU).
+        qzeros: Zero points (FP16, CPU).
         perm: Column permutation order (used when actorder=True).
 
     Note:
@@ -57,15 +58,50 @@ class GPTQResult(QuantizationResult):
     # =========================================
     # Weight reconstruction data
     # =========================================
-    quantized_weight: Optional[torch.Tensor] = None  # Quantized weights (INT type)
-    scale: Optional[torch.Tensor] = None             # Scale coefficients
-    zero: Optional[torch.Tensor] = None              # Zero points
-    perm: Optional[torch.Tensor] = None              # Column permutation order (actorder=True)
+    qweight: Optional[torch.Tensor] = None  # Quantized weights (INT type)
+    scales: Optional[torch.Tensor] = None  # Scale coefficients
+    qzeros: Optional[torch.Tensor] = None  # Zero points
+    perm: Optional[torch.Tensor] = None  # Column permutation order (actorder=True)
 
 
 @dataclass
 class GPTQ(Quantizer):
-    """GPTQ quantizer class"""
+    """GPTQ (Accurate Post-Training Quantization for Generative Pre-trained Transformers) quantizer.
+
+    Performs layer-wise weight quantization using second-order (Hessian) information
+    to minimize the output reconstruction error. Supports grouped quantization,
+    activation-order column reordering, and MSE-based grid search for optimal
+    scale/zero-point parameters.
+
+    GPTQ requires calibration data and Hessian matrix computation.
+
+    Attributes:
+        flag_calibration (bool): Whether calibration data is needed (True for GPTQ).
+        flag_hessian (bool): Whether Hessian matrix is needed (True for GPTQ).
+        blocksize (int): Number of columns quantized together in each block.
+            Larger values may improve quality but increase memory usage. Default is 128.
+        percdamp (float): Percentage of the Hessian diagonal average added for
+            numerical stability (dampening). Default is 0.01.
+        wbits (int): Quantization bit width (1-8). Default is 4.
+        groupsize (int): Number of columns sharing the same scale/zero-point.
+            -1 means per-channel (no grouping). Must be -1 or in 1..blocksize. Default is -1.
+        actorder (bool): If True, reorder columns by decreasing activation magnitude
+            before quantization (desc_act). Default is False.
+        mse (bool): If True, use MSE-based grid search to find optimal
+            scale and zero-point parameters. Default is False.
+        sym (bool): If True, use symmetric quantization (zero-point fixed at midpoint).
+            If False, use asymmetric quantization (zero-point computed from data).
+            Default is True.
+        q_grid (int): Number of grid points for MSE-based scale search
+            (used when mse=True). Default is 600.
+        q_norm (float): Norm exponent for MSE grid search error metric
+            (used when mse=True). Default is 2.4.
+
+    Example:
+        >>> from onecomp.quantizer.gptq import GPTQ
+        >>> quantizer = GPTQ(wbits=4, groupsize=128)
+        >>> quantizer = GPTQ(wbits=4, groupsize=128, sym=False, actorder=True)
+    """
 
     flag_calibration: bool = True
     flag_hessian: bool = True
@@ -78,9 +114,49 @@ class GPTQ(Quantizer):
     actorder: bool = False
     mse: bool = False
     # perccorr: float = 0.5
-    sym: bool = False
+    sym: bool = True
     q_grid: int = 600
     q_norm: float = 2.4
+
+    def validate_params(self):
+        """Validate GPTQ parameters once at quantizer initialization."""
+        bad = []
+
+        if not (isinstance(self.blocksize, int) and self.blocksize >= 1):
+            bad.append(
+                f"Invalid GPTQ parameter 'blocksize': {self.blocksize!r} (expected int >= 1)"
+            )
+
+        if not (isinstance(self.percdamp, (int, float)) and self.percdamp >= 3.95e-4):
+            bad.append(
+                f"Invalid GPTQ parameter 'percdamp': {self.percdamp!r} "
+                f"(expected numeric >= 3.95e-4)"
+            )
+
+        if not (isinstance(self.wbits, int) and 1 <= self.wbits <= 64):
+            bad.append(f"Invalid GPTQ parameter 'wbits': {self.wbits!r} (expected int in 1..64)")
+
+        if not (
+            isinstance(self.groupsize, int)
+            and (self.groupsize == -1 or (1 <= self.groupsize <= self.blocksize))
+        ):
+            bad.append(
+                "Invalid GPTQ parameter 'groupsize': "
+                f"{self.groupsize!r} (expected int -1 or 1..blocksize)"
+            )
+
+        if not (isinstance(self.q_grid, int) and 1 <= self.q_grid <= 1000):
+            bad.append(
+                f"Invalid GPTQ parameter 'q_grid': {self.q_grid!r} (expected int in 1..1000)"
+            )
+
+        if not (isinstance(self.q_norm, (int, float)) and self.q_norm >= 1e-5):
+            bad.append(
+                f"Invalid GPTQ parameter 'q_norm': {self.q_norm!r} (expected numeric >= 1e-5)"
+            )
+
+        if bad:
+            raise ValueError("; ".join(bad))
 
     def quantize_layer(self, module, input, hessian=None):
         """Quantize the layer
@@ -116,37 +192,42 @@ class GPTQ(Quantizer):
             groupsize=self.groupsize,
             actorder=self.actorder,
             sym=self.sym,
-            quantized_weight=result_dict["quantized_weight"],
-            scale=result_dict["scale"],
-            zero=result_dict["zero"],
+            qweight=result_dict["qweight"],
+            scales=result_dict["scales"],
+            qzeros=result_dict["qzeros"],
             perm=result_dict["perm"],
         )
 
     def get_quant_config(self) -> dict:
-        """Return quantization_config dict for save_quantized_model."""
+        """Return quantization_config dict for save_quantized_model(HF/vLLM compatible keys)."""
         return {
             "quant_method": "gptq",
-            "wbits": self.wbits,
-            "groupsize": self.groupsize,
-            "actorder": self.actorder,
+            "bits": self.wbits,
+            "group_size": self.groupsize,
+            "desc_act": self.actorder,
             "sym": self.sym,
         }
 
     def create_inference_layer(self, result, linear_module, **kwargs):
         """Build GPTQLinear from GPTQResult."""
         from onecomp.quantizer.gptq.gptq_layer import GPTQLinear
+
         pack_weights = kwargs.get("pack_weights", True)
         return GPTQLinear.from_quantization_result(
             result=result,
-            bias=linear_module.bias if hasattr(linear_module, "bias") and linear_module.bias is not None else None,
+            bias=(
+                linear_module.bias
+                if hasattr(linear_module, "bias") and linear_module.bias is not None
+                else None
+            ),
             device=linear_module.weight.device,
             pack_weights=pack_weights,
             use_gemlite=kwargs.get("use_gemlite"),
         )
 
 
-def run_gptq(
-    H: torch.Tensor,  # Hessian matrix
+def run_gptq(  # pylint: disable=too-many-positional-arguments
+    hessian: torch.Tensor,
     layer: torch.nn.Module,
     blocksize: int = 128,
     percdamp: float = 0.01,
@@ -155,7 +236,7 @@ def run_gptq(
     actorder: bool = False,
     mse: bool = False,
     # perccorr=0.5
-    sym: bool = False,
+    sym: bool = True,
     q_grid: int = 600,
     q_norm: float = 2.4,
 ) -> dict[str, torch.Tensor]:
@@ -177,50 +258,59 @@ def run_gptq(
         grid=q_grid,
     )
 
-    W = layer.weight.data.clone()
+    matrix_W = layer.weight.data.clone()
     if isinstance(layer, nn.Conv2d):
-        W = W.flatten(1)
-    if isinstance(layer, transformers.Conv1D):
-        W = W.t()
-    W = W.float()
-    # H = H.clone()
+        matrix_W = matrix_W.flatten(1)
+    if isinstance(layer, Conv1D):
+        matrix_W = matrix_W.t()
+    matrix_W = matrix_W.float()
 
     if not quantizer.ready():
-        quantizer.find_params(W, weight=True)
+        quantizer.find_params(matrix_W, weight=True)
 
-    dead = torch.diag(H) == 0
-    H[dead, dead] = 1
-    W[:, dead] = 0
+    dead = torch.diag(hessian) == 0
+    hessian[dead, dead] = 1
+    matrix_W[:, dead] = 0
 
     perm = None
     if actorder:
-        perm = torch.argsort(torch.diag(H), descending=True)
-        W = W[:, perm]
-        H = H[perm][:, perm]
+        perm = torch.argsort(torch.diag(hessian), descending=True)
+        matrix_W = matrix_W[:, perm]
+        hessian = hessian[perm][:, perm]
         invperm = torch.argsort(perm)
 
-    Q = torch.zeros_like(W)
-    Q_int = torch.zeros_like(W, dtype=torch.int32)
+    Q = torch.zeros_like(matrix_W)
+    Q_int = torch.zeros_like(matrix_W, dtype=torch.int32)
 
-    damp = percdamp * torch.mean(torch.diag(H))
-    diag = torch.arange(H.shape[0], device=H.device)
-    H[diag, diag] += damp
-    H = torch.linalg.cholesky(H)
-    H = torch.cholesky_inverse(H)
-    H = torch.linalg.cholesky(H, upper=True)
-    Hinv = H
+    damp = percdamp * torch.mean(torch.diag(hessian))
+    diag = torch.arange(hessian.shape[0], device=hessian.device)
+    hessian[diag, diag] += damp
+    hessian = torch.linalg.cholesky(hessian)
+    hessian = torch.cholesky_inverse(hessian)
+    hessian = torch.linalg.cholesky(hessian, upper=True)
+    Hinv = hessian
 
-    # total_blocks = (H.shape[0] + blocksize - 1) // blocksize
+    # Accumulate per-group scale/zero for grouped quantization
+    if groupsize != -1:
+        num_groups = (hessian.shape[0] + groupsize - 1) // groupsize
+        all_scales = torch.zeros(
+            matrix_W.shape[0], num_groups, dtype=matrix_W.dtype, device=matrix_W.device
+        )
+        all_zeros = torch.zeros(
+            matrix_W.shape[0], num_groups, dtype=matrix_W.dtype, device=matrix_W.device
+        )
 
-    for block_idx, i1 in enumerate(range(0, H.shape[0], blocksize)):
-        i2 = min(i1 + blocksize, H.shape[0])
+    # total_blocks = (hessian.shape[0] + blocksize - 1) // blocksize
+
+    for block_idx, i1 in enumerate(range(0, hessian.shape[0], blocksize)):
+        i2 = min(i1 + blocksize, hessian.shape[0])
         count = i2 - i1
 
         # Per-block progress display
         # if block_idx % 10 == 0 or block_idx == total_blocks - 1:
         #    print(f"[GPTQ Block {block_idx}/{total_blocks-1}] Processing columns {i1}-{i2-1}")
 
-        W1 = W[:, i1:i2].clone()
+        W1 = matrix_W[:, i1:i2].clone()
         Q1 = torch.zeros_like(W1)
         Q1_int = torch.zeros_like(W1, dtype=torch.int32)
         Err1 = torch.zeros_like(W1)
@@ -233,20 +323,22 @@ def run_gptq(
             if groupsize != -1:
                 if (i1 + i) % groupsize == 0:
                     quantizer.find_params(
-                        W[:, (i1 + i) : (i1 + i + groupsize)], weight=True
+                        matrix_W[:, (i1 + i) : (i1 + i + groupsize)], weight=True
                     )
+                    # Accumulate group scale/zero
+                    group_idx = (i1 + i) // groupsize
+                    all_scales[:, group_idx] = quantizer.scale.squeeze(-1)
+                    all_zeros[:, group_idx] = quantizer.zero.squeeze(-1)
 
-            q_int = quantize(
-                w.unsqueeze(1), quantizer.scale, quantizer.zero, quantizer.maxq
-            )
-            
+            q_int = quantize(w.unsqueeze(1), quantizer.scale, quantizer.zero, quantizer.maxq)
+
             if q_int is not None:
                 q = dequantize(q_int, quantizer.scale, quantizer.zero, quantizer.maxq).flatten()
                 q_int = q_int.flatten()
             else:
                 w_expanded = w.unsqueeze(1)  # (out_features, 1)
                 q = quantize_trits(w_expanded, quantizer.scale, quantizer.zero).flatten()
-            
+
             Q1[:, i] = q
             if q_int is not None:
                 Q1_int[:, i] = q_int
@@ -258,13 +350,13 @@ def run_gptq(
         Q[:, i1:i2] = Q1
         Q_int[:, i1:i2] = Q1_int
 
-        W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
+        matrix_W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
     if actorder:
         Q = Q[:, invperm]
         Q_int = Q_int[:, invperm]
 
-    if isinstance(layer, transformers.Conv1D):
+    if isinstance(layer, Conv1D):
         Q = Q.t()
         Q_int = Q_int.t()
 
@@ -272,19 +364,23 @@ def run_gptq(
     dequantized_weight = Q.reshape(layer.weight.shape).to(layer.weight.data.dtype).cpu()
     quantized_weight = Q_int.reshape(layer.weight.shape).cpu()
 
-    scale = quantizer.scale.cpu()
-    zero = quantizer.zero.cpu()
+    if groupsize != -1:
+        scale = all_scales.to(dtype=torch.float16, device="cpu").T
+        zero = all_zeros.to(dtype=torch.int32, device="cpu").T
+    else:
+        scale = quantizer.scale.to(dtype=torch.float16, device="cpu")
+        zero = quantizer.zero.to(dtype=torch.int32, device="cpu")
     perm = perm.cpu() if perm is not None else None
 
-    del H, Hinv, W, Q, Q_int
+    del hessian, Hinv, matrix_W, Q, Q_int
     gc.collect()
     torch.cuda.empty_cache()
 
     return {
         "dequantized_weight": dequantized_weight,
-        "quantized_weight": quantized_weight,
-        "scale": scale,
-        "zero": zero,
+        "qweight": quantized_weight,
+        "scales": scale,
+        "qzeros": zero,
         "perm": perm,
     }
 
@@ -334,6 +430,7 @@ def dequantize(
     """
     return scale * (quantized.float() - zero)
 
+
 def quantize_trits(
     x: torch.Tensor,
     scale: torch.Tensor,
@@ -341,15 +438,22 @@ def quantize_trits(
 ) -> torch.Tensor:
     return (x > scale / 2).float() * scale + (x < zero / 2).float() * zero
 
+
 class GPTQExcecutor(nn.Module):
 
-    def __init__(self, shape=1):
-        super(GPTQExcecutor, self).__init__()
-        self.register_buffer("maxq", torch.tensor(0))
-        self.register_buffer("scale", torch.zeros(shape))
-        self.register_buffer("zero", torch.zeros(shape))
+    def __init__(self):
+        super().__init__()
+        self.maxq = None
+        self.scale = None
+        self.zero = None
+        self.perchannel = None
+        self.sym = None
+        self.mse = None
+        self.norm = None
+        self.grid = None
+        self.maxshrink = None
 
-    def configure(
+    def configure(  # pylint: disable=too-many-positional-arguments
         self,
         bits,
         perchannel=False,
@@ -419,12 +523,8 @@ class GPTQExcecutor(nn.Module):
                 xmin1 = p * xmin
                 xmax1 = p * xmax
                 scale1 = (xmax1 - xmin1) / self.maxq
-                zero1 = (
-                    torch.round(-xmin1 / scale1) if not self.sym else self.zero
-                )
-                q_int = quantize(
-                    x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq
-                )
+                zero1 = torch.round(-xmin1 / scale1) if not self.sym else self.zero
+                q_int = quantize(x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
                 if q_int is not None:
                     q = dequantize(q_int, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
                     q -= x
@@ -463,6 +563,16 @@ class GPTQExcecutor(nn.Module):
             self.zero = self.zero.unsqueeze(0)
 
     def quantize(self, x):
+        """Quantize and dequantize input tensor using current scale/zero parameters.
+
+        If parameters are not yet computed (ready() is False), returns the input unchanged.
+
+        Args:
+            x (torch.Tensor): Input tensor to quantize.
+
+        Returns:
+            torch.Tensor: Dequantized tensor, or the original input if not ready.
+        """
         if self.ready():
             q_int = quantize(x, self.scale, self.zero, self.maxq)
             if q_int is not None:
@@ -472,7 +582,17 @@ class GPTQExcecutor(nn.Module):
         return x
 
     def enabled(self):
-        return self.maxq > 0
+        """Check whether quantization is active (maxq > 0).
+
+        Returns:
+            bool: True if quantization bit width has been configured and is positive.
+        """
+        return self.maxq is not None and self.maxq > 0
 
     def ready(self):
-        return torch.all(self.scale != 0)
+        """Check whether scale parameters have been computed.
+
+        Returns:
+            bool: True if scale is set and all values are non-zero.
+        """
+        return self.scale is not None and torch.all(self.scale != 0)
