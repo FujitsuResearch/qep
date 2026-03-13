@@ -4,7 +4,7 @@
 
 ### Completion of Save/Load Pipeline
 
-- Added new `QuantizedModelLoader` class (`quantized_model_loader.py`)
+- **Added new `QuantizedModelLoader` class (`quantized_model_loader.py`)**
   - Automatically detects quantization config (GPTQ/DBF) from `config.json` and loads the model
   - Reads state_dict from safetensors, replaces layers with quantized layers, and loads into an empty model
   - Supports automatic device placement via `accelerate`
@@ -38,7 +38,7 @@
 
 ### Build System Updates
 
-- Migrated package and project management to `uv` and `pyproject.toml`.
+- **Migrated package and project management to `uv` and `pyproject.toml`.**
 - Applied `black` linter to scripts.
 
 ### QEP Module Refactoring
@@ -56,7 +56,18 @@
 - Fixed architecture-aware QEP to respect `num_layers` and layer selection by checking `quantizer.module_to_name` (`onecomp/qep/_quantize_with_qep_arch.py`)
 - Fixed architecture-aware QEP to support `exclude_layer_keywords`: excluded layers are quantized without weight correction (`onecomp/qep/_quantize_with_qep_arch.py`)
 - Added consistency test between generic and architecture-aware QEP implementations (`tests/onecomp/test_qep_general_consistency.py`)
-- Changed `QEPConfig.general` default from `True` to `False` (architecture-aware implementation is now the default)
+- **BREAKING: Changed `QEPConfig.general` default from `True` to `False` (architecture-aware implementation is now the default)**
+
+### GPTQ Refactoring (`onecomp/quantizer/gptq/_gptq.py`)
+
+- **BREAKING: Changed default `sym` from `False` to `True` (symmetric quantization) for both `GPTQ` class and `run_gptq()` function. Code relying on the previous asymmetric default must now explicitly pass `sym=False`.**
+- Expanded `GPTQ` class docstring with full attribute descriptions and usage examples
+- Renamed `H` parameter to `hessian` in `run_gptq()` for clarity
+- Renamed local variable `W` to `matrix_W` in `run_gptq()` for clarity
+- Changed imports to `from` style (`from torch import nn`, `from transformers import Conv1D`)
+- Refactored `GPTQExcecutor.__init__`: replaced `register_buffer` with explicit `None` initialization for all attributes
+- Added docstrings to `GPTQExcecutor.quantize()`, `enabled()`, and `ready()` methods
+- Updated `test_gptq.py` boundary/abnormal parameters to reflect new `sym=True` default
 
 ## [v0.3.5] 2026-03-05
 

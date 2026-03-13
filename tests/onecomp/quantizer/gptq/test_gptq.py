@@ -27,8 +27,8 @@ class TestGPTQ(BaseQuantizeSpec):
     boundary_parameters = [
         {"actorder": True},
         {"mse": True},
-        {"sym": True},
-        {"actorder": True, "mse": True, "sym": True},
+        {"sym": False},
+        {"actorder": True, "mse": True, "sym": False},
         {
             "blocksize": 1,
             "percdamp": 3.95e-4,
@@ -37,13 +37,13 @@ class TestGPTQ(BaseQuantizeSpec):
             "q_grid": 1,
             "q_norm": 1e-5,
             "mse": True,
-            "sym": True,
+            "sym": False,
         },
     ]
     abnormal_parameters = [
         {"blocksize": -1},
         {"percdamp": -0.1},
-        {"wbits": 0, "sym": True},
+        {"wbits": 0},
         {"groupsize": 0},
         {"q_grid": -1, "mse": True},
         {"q_norm": 0.0, "mse": True},
