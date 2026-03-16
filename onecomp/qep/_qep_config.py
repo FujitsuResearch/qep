@@ -23,6 +23,8 @@ class QEPConfig:
             Default is 0.01.
         perccorr (float): Correction percentage for error propagation.
             Default is 0.5.
+        device (str): Device to use for QEP computations (e.g., "cuda").
+            Default is "cuda:0".
         exclude_layer_keywords (list[str]): List of keywords to identify
             layers excluded from error propagation. Layers whose names
             contain any of these keywords will be excluded.
@@ -49,5 +51,6 @@ class QEPConfig:
     general: bool = False
     percdamp: float = 0.01
     perccorr: float = 0.5
+    device: str = "cuda:0"
     exclude_layer_keywords: list[str] = field(default_factory=lambda: ["mlp.down_proj"])
     # TODO: exclude_layer_keywords depends on the architecture and needs to be fixed

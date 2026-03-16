@@ -55,6 +55,12 @@ def _get_blocks(
     raise RuntimeError("Transformer blocks not found.")
 
 
+class StopForward(Exception):
+    """An exception to stop the forward pass after capturing activations."""
+
+    pass
+
+
 class Catcher(nn.Module):
     """A wrapper module to capture input activations and keyword arguments."""
 
@@ -67,7 +73,7 @@ class Catcher(nn.Module):
     def forward(self, inp: torch.Tensor, **kwargs: dict):
         self.inp = inp.clone()
         self.kwargs.update(kwargs)
-        return self.module(inp, **kwargs)
+        raise StopForward()
 
 
 @torch.no_grad()
@@ -102,8 +108,10 @@ def get_blocks_and_inputs(
     # forward model to capture the input activations of the first block
     with torch.no_grad():
         for inp in inp_ids.split(batch_size):
-            _ = model(inp, **model_kwargs)
-            block_inps.append(blocks[0].inp.cpu())
+            try:
+                _ = model(inp, **model_kwargs)
+            except StopForward:
+                block_inps.append(blocks[0].inp.cpu())
 
     inps = torch.cat(block_inps)
     kwargs = blocks[0].kwargs
@@ -112,6 +120,19 @@ def get_blocks_and_inputs(
     blocks[0] = blocks[0].module
 
     return (blocks, inps, kwargs)
+
+
+def move_kwargs_to_device(x, device):
+    if isinstance(x, torch.Tensor):
+        return x.to(device)
+    elif isinstance(x, dict):
+        return {k: move_kwargs_to_device(v, device) for k, v in x.items()}
+    elif isinstance(x, list):
+        return [move_kwargs_to_device(v, device) for v in x]
+    elif isinstance(x, tuple):
+        return tuple(move_kwargs_to_device(v, device) for v in x)
+    else:
+        return x
 
 
 def _make_tensor_id(x: torch.Tensor):
@@ -210,7 +231,7 @@ def compute_hessian_and_crossterm(
     C = torch.zeros((hidden_dim, hidden_dim), device=device)
 
     # compute Hessian and crossterm
-    N, T, _ = inps_q.shape
+    N = inps_q.size(0)
     nsamples = 0
 
     # compute Hessian and crossterm in batches
@@ -307,13 +328,13 @@ def run_quantize_with_qep_arch(
     # TODO: Parameterize when necessary
     batch_size = 16
 
-    model = model_config.load_model()
+    model = model_config.load_model(device_map="cpu")
     tokenizer = model_config.load_tokenizer()
-    device = next(model.parameters()).device
+    device = qep_config.device
 
     model_inputs = prepare_calibration_dataset(
         tokenizer=tokenizer,
-        device=device,
+        device=torch.device("cpu"),
         calibration_dataset=calibration_dataset,
         max_length=max_length,
         num_calibration_samples=num_calibration_samples,
@@ -328,10 +349,9 @@ def run_quantize_with_qep_arch(
     # 1. Prepare transformer blocks and their inputs
     blocks, inps, kwargs = get_blocks_and_inputs(model, model_inputs, batch_size)
 
-    model.cpu()
-
     inps_q = inps
     inps_f = inps.clone()
+    kwargs = move_kwargs_to_device(kwargs, device)
 
     logger.info("Quantizing the model using %s", quantizer.name)
 
@@ -375,10 +395,10 @@ def run_quantize_with_qep_arch(
 
                 # Skip layers not registered for quantization
                 if module not in quantizer.module_to_name:
-                    logger.info("Skipping layer (not in quantization targets): %s", name)
+                    logger.info("Skipping layer (not in quantization targets)")
                     continue
-                else:
-                    name = quantizer.module_to_name[module]
+
+                name = quantizer.module_to_name[module]
 
                 # Determine whether to apply weight correction (QEP).
                 # Layers matching exclude_layer_keywords are quantized

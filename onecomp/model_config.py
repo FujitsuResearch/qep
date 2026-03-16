@@ -55,13 +55,16 @@ class ModelConfig:
             return self.path
         return None
 
-    def load_model(self):
+    def load_model(self, device_map=None):
         """Load the model"""
+
+        if device_map is None:
+            device_map = self.device
 
         model = AutoModelForCausalLM.from_pretrained(
             self.get_model_id_or_path(),
             dtype=getattr(torch, self.dtype),
-            device_map=self.device,
+            device_map=device_map,
         )
         model.eval()
         return model

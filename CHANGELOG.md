@@ -1,5 +1,22 @@
 # Change log
 
+## [v0.3.7] 2026-03-16
+
+### GPU Memory Optimization for Architecture-aware QEP
+
+- Added `device` field to `QEPConfig` (`onecomp/qep/_qep_config.py`)
+  - Specifies the GPU device for block-wise QEP computation (default: `"cuda:0"`)
+  - Eliminates dependency on `model_config.device` and supports multi-GPU environments
+- Added `device_map` parameter to `ModelConfig.load_model()` (`onecomp/model_config.py`)
+  - Allows overriding the device placement at load time without affecting existing callers
+- Optimized `run_quantize_with_qep_arch` to avoid loading the entire model onto GPU (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - Model is now loaded on CPU via `load_model(device_map="cpu")`
+  - Calibration data is prepared on CPU
+  - Only individual transformer blocks are moved to GPU during processing
+- Added `StopForward` exception and modified `Catcher` to halt the forward pass immediately after capturing first-block inputs, avoiding unnecessary computation through remaining layers (`onecomp/qep/_quantize_with_qep_arch.py`)
+- Added `move_kwargs_to_device` helper to recursively move keyword arguments to the target device (`onecomp/qep/_quantize_with_qep_arch.py`)
+- Fixed `UnboundLocalError` when a module in a group is not registered in `quantizer.module_to_name` (`onecomp/qep/_quantize_with_qep_arch.py`)
+
 ## [v0.3.6] 2026-03-12
 
 ### Completion of Save/Load Pipeline
