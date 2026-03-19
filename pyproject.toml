@@ -38,6 +38,12 @@ gemlite = [
     "gemlite @ git+https://github.com/mobiusml/gemlite.git",
     "hqq @ git+https://github.com/mobiusml/hqq.git",
 ]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
+]
 
 [tool.uv]
 conflicts = [
