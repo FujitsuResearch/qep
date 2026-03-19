@@ -71,25 +71,26 @@ class Onebit(Quantizer):
         quantize_layer(module, input, hessian): Quantizes a given layer and returns OnebitResult.
     """
 
+    flag_calibration: bool = True
+    flag_hessian: bool = True
+
     iters: int = 10
     use_importance_scaling: bool = True
     use_balancing: bool = True
     balance_iters: int = 40
     balance_alpha: float = 1.0
 
-    def quantize_layer(self, module, input, hessian):
+    def quantize_layer(self, module, input=None, hessian=None):
         """Quantize the layer.
 
         Args:
             module (torch.nn.Module): The layer module.
-            input (tuple): The input to the layer.
+            input (tuple): The input to the layer (not used).
             hessian (torch.Tensor): The Hessian matrix.
 
         Returns:
             OnebitResult: OneBit quantization result object containing quantized weights and parameters.
         """
-
-        hessian = self.calculate_hessian(module, input)
         weight_results = run_onebit(
             hessian,
             module,
