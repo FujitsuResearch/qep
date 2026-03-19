@@ -1,5 +1,20 @@
 # Change log
 
+## [v0.3.8] 2026-03-19
+
+### Bug Fix: Onebit Quantizer
+
+- Fixed `Onebit` to declare `flag_calibration=True` and `flag_hessian=True` (`onecomp/quantizer/onebit/_onebit.py`)
+  - Previously, Onebit computed the Hessian internally from `input` despite declaring all flags as `False`, causing a crash when used through `quantize_without_calibration` or chunked quantization paths
+  - Now uses the Hessian provided by the Runner, consistent with other calibration-based quantizers (GPTQ, DBF, QUIP)
+
+### Quantizer Signature Consistency
+
+- Added `input=None` default to `quantize_layer` in `RTN`, `CQ`, `QBB` (`onecomp/quantizer/{rtn,cq,qbb}/`)
+  - Aligns with the base `Quantizer.quantize_layer(self, module, input=None, hessian=None)` signature
+  - Enables these quantizers to be used in `Runner(quantizers=[...])` via the chunked quantization path
+- Added `input=None, hessian=None` defaults to `Onebit.quantize_layer` for the same reason
+
 ## [v0.3.7] 2026-03-16
 
 ### GPU Memory Optimization for Architecture-aware QEP

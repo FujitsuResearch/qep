@@ -89,7 +89,7 @@ class RTN(Quantizer):
     groupsize: int = -1
     sym: bool = False
 
-    def quantize_layer(self, module, input, hessian=None):
+    def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using RTN.
 
         Args:

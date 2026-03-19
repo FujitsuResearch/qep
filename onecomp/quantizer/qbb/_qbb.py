@@ -102,7 +102,7 @@ class QBB(Quantizer):
     use_progressive_quantization: bool = False
     progressive_bits: int = 2
 
-    def quantize_layer(self, module, input, hessian=None):
+    def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using QBB.
 
         Args:
