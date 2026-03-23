@@ -3,9 +3,11 @@ __pycache__
 *.egg-info
 models
 .vscode/
+.cursor/rules/benchmark-directory.mdc
 .hydra/
 *.out
 *.err
 md/*.md
 example/run_example.sh
 work/issue-*
+site/

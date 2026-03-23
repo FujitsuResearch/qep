@@ -1,34 +1,13 @@
-# Fujitsu Open Source Model Compression Software
-- Release Plan
-  - NeurIPS paper version release (December 2, 2025)
-  - Official version release (March, 2026)
-- Citation
-```
-@inproceedings{
-arai2025quantization,
-title={Quantization Error Propagation: Revisiting Layer-Wise Post-Training Quantization},
-author={Yamato Arai and Yuma Ichikawa},
-booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems},
-year={2025},
-url={https://openreview.net/forum?id=a3l3K9khbL}
-}
-```
+# Fujitsu One Compression
 
----
+Fujitsu One Compression (OneComp) is a Python package for LLM compression.
 
-> **Below is a draft of the new README**
-
----
-
-# Python package for LLM compression 
-
-This is a Python package currently under development.
-
-It has not been officially released yet and may behave unstably.
+This package is currently under development (version 0) and may behave unstably.
 
 ## 📦 Features
 
-(TBD) 
+- **Quantization Error Propagation (QEP)**: A post-training quantization method that corrects quantization errors by propagating them to subsequent layers, improving the accuracy of quantized LLMs. See [Arai & Ichikawa, NeurIPS 2025](https://openreview.net/forum?id=a3l3K9khbL) for details.
+- (TBD)
 
 ## 🔧 Installation
 
@@ -141,6 +120,15 @@ pip install -e ".[dev]"
 
 Replace `cu128` with the appropriate variant for your environment: `cpu`, `cu118`, `cu121`, `cu124`, `cu126`, or `cu128`.
 
+
+### Building Documentation Locally
+
+```bash
+uv sync --extra cu128 --extra dev --extra docs
+uv run mkdocs serve
+```
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 
 ## 🚀 Example
 

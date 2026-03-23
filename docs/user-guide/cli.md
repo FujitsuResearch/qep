@@ -1,0 +1,132 @@
+# CLI Reference
+
+OneComp provides the `onecomp` command for quantizing models directly from the terminal.
+
+## Installation
+
+The `onecomp` command is installed automatically with the package:
+
+```bash
+pip install git+https://github.com/FujitsuResearch/OneCompression.git
+```
+
+Verify the installation:
+
+```bash
+onecomp --version
+```
+
+You can also use `python -m onecomp` as an alternative:
+
+```bash
+python -m onecomp --version
+```
+
+## Usage
+
+```
+onecomp [-h] [--wbits WBITS] [--groupsize GROUPSIZE] [--device DEVICE]
+        [--no-qep] [--no-eval] [--save-dir SAVE_DIR] [--version]
+        model_id
+```
+
+### Positional Arguments
+
+| Argument   | Description                              |
+|------------|------------------------------------------|
+| `model_id` | Hugging Face model ID or local path      |
+
+### Options
+
+| Option                  | Default    | Description                                              |
+|-------------------------|------------|----------------------------------------------------------|
+| `--wbits WBITS`         | `4`        | Quantization bit width                                   |
+| `--groupsize GROUPSIZE` | `128`      | GPTQ group size (`-1` to disable grouping)               |
+| `--device DEVICE`       | `cuda:0`   | Device to place the model on                             |
+| `--no-qep`              |            | Disable QEP (enabled by default)                         |
+| `--no-eval`             |            | Skip perplexity and accuracy evaluation                  |
+| `--save-dir SAVE_DIR`   | `auto`     | Save directory (`auto` = derived from model name, `none` to skip) |
+| `--version`             |            | Show version and exit                                    |
+
+## Examples
+
+### Basic usage
+
+Quantize with defaults (QEP + GPTQ 4-bit, evaluate, auto-save):
+
+```bash
+onecomp TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
+```
+
+### 3-bit quantization
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --wbits 3
+```
+
+### Custom group size
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --wbits 4 --groupsize 64
+```
+
+### Without QEP
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --no-qep
+```
+
+### Skip evaluation (quantize and save only)
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --no-eval
+```
+
+### Custom save directory
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --save-dir ./my_quantized_model
+```
+
+### Skip saving
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --save-dir none
+```
+
+### Use a specific GPU
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --device cuda:1
+```
+
+## Default Behavior
+
+When run with no options, the `onecomp` command:
+
+1. Loads the model and tokenizer from Hugging Face Hub
+2. Quantizes with GPTQ (4-bit, groupsize=128) + QEP
+3. Evaluates perplexity (wikitext-2) and zero-shot accuracy
+4. Saves the quantized model to `<model_name>-gptq-4bit/`
+
+## Equivalent Python API
+
+The CLI is a thin wrapper around `Runner.auto_run`. Every CLI invocation maps directly
+to the Python API:
+
+```bash
+onecomp meta-llama/Llama-2-7b-hf --wbits 3 --no-qep --save-dir ./output
+```
+
+is equivalent to:
+
+```python
+from onecomp import Runner
+
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    wbits=3,
+    qep=False,
+    save_dir="./output",
+)
+```

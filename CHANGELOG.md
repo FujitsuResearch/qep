@@ -1,5 +1,59 @@
 # Change log
 
+## [v0.4.0] 2026-03-20
+
+### New Feature: `Runner.auto_run()` Classmethod
+
+- Added `Runner.auto_run()` classmethod for one-liner quantization (`onecomp/runner.py`)
+  - Handles model loading, GPTQ quantization with QEP, evaluation (perplexity + accuracy), and model saving in a single call
+  - Parameters: `model_id`, `wbits` (default: 4), `groupsize` (default: 128), `device`, `qep` (default: True), `evaluate` (default: True), `save_dir` (default: "auto")
+  - Returns the configured `Runner` instance for further analysis
+- Made `model_config` parameter optional in `Runner.__init__()` (default: `None`) to allow `Runner()` without arguments
+
+### New Feature: `onecomp` CLI Command
+
+- Added `onecomp` CLI command for terminal-based quantization (`onecomp/cli.py`)
+  - Usage: `onecomp <model_id> [--wbits N] [--groupsize N] [--device DEV] [--no-qep] [--no-eval] [--save-dir DIR]`
+  - Thin wrapper around `Runner.auto_run()`
+- Added `onecomp/__main__.py` for `python -m onecomp` support
+- Registered `console_scripts` entry point in `pyproject.toml`
+
+### New Example
+
+- Added `example/example_auto_run.py` demonstrating one-liner quantization with `Runner.auto_run()`
+
+### Documentation
+
+- Updated `docs/index.md`: Quick Example now shows `auto_run` and CLI with tabbed view
+- Restructured `docs/getting-started/quickstart.md`: `auto_run` / CLI as the fastest path, step-by-step workflow below
+- Updated `docs/getting-started/installation.md`: Added `onecomp` command examples to Running Commands section
+- Updated `docs/user-guide/basic-usage.md`: Added "Quick Path: `Runner.auto_run()`" section
+- Updated `docs/user-guide/examples.md`: Added `auto_run` and CLI examples at the top
+- Added `docs/user-guide/cli.md`: Full CLI reference with all options and usage examples
+- Updated `docs/api/runner.md`: Added `auto_run` to mkdocstrings members
+- Updated `docs/api/index.md`: Added `cli.py` and `__main__.py` to Module Structure
+- Updated `mkdocs.yml`: Added CLI page to navigation
+- Added "Building Documentation Locally" section to `README.md`
+
+### Python Version Constraint
+
+- Restricted `requires-python` to `">=3.12, <3.14"` in `pyproject.toml`
+  - PyTorch does not yet provide wheels for Python 3.14, causing `uv sync` to fail when uv auto-selects CPython 3.14
+- Updated `uv.lock` to reflect the new Python version constraint
+
+### Bug Fix: Onebit Quantizer
+
+- Fixed `Onebit` to declare `flag_calibration=True` and `flag_hessian=True` (`onecomp/quantizer/onebit/_onebit.py`)
+  - Previously, Onebit computed the Hessian internally from `input` despite declaring all flags as `False`, causing a crash when used through `quantize_without_calibration` or chunked quantization paths
+  - Now uses the Hessian provided by the Runner, consistent with other calibration-based quantizers (GPTQ, DBF, QUIP)
+
+### Quantizer Signature Consistency
+
+- Added `input=None` default to `quantize_layer` in `RTN`, `CQ`, `QBB` (`onecomp/quantizer/{rtn,cq,qbb}/`)
+  - Aligns with the base `Quantizer.quantize_layer(self, module, input=None, hessian=None)` signature
+  - Enables these quantizers to be used in `Runner(quantizers=[...])` via the chunked quantization path
+- Added `input=None, hessian=None` defaults to `Onebit.quantize_layer` for the same reason
+
 ## [v0.3.7] 2026-03-16
 
 ### GPU Memory Optimization for Architecture-aware QEP

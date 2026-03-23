@@ -87,7 +87,7 @@ class CQ(Quantizer):
     # Parameters for the CQ quantizer
     each_row: bool = True
 
-    def quantize_layer(self, module, input, hessian=None):
+    def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using CQ.
 
         Args:
