@@ -95,18 +95,20 @@ Adding `--extra dev` installs development tools (black, pytest, pylint, matplotl
 === "uv run (no activation needed)"
 
     ```bash
+    uv run onecomp --version
+    uv run onecomp TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
     uv run pytest tests/ -v
     uv run python example/example1.py
-    uv run black --check onecomp/
     ```
 
 === "Traditional virtualenv"
 
     ```bash
     source .venv/bin/activate
+    onecomp --version
+    onecomp TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
     pytest tests/ -v
     python example/example1.py
-    black --check onecomp/
     ```
 
 ## For Developers (pip)

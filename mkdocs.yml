@@ -81,6 +81,7 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - User Guide:
       - Basic Usage: user-guide/basic-usage.md
+      - CLI: user-guide/cli.md
       - Configuration: user-guide/configuration.md
       - Examples: user-guide/examples.md
   - Algorithms:

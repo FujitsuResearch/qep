@@ -18,23 +18,24 @@ It implements state-of-the-art quantization algorithms including GPTQ, DBF, RTN,
 
 ## Quick Example
 
-```python
-from onecomp import ModelConfig, Runner, GPTQ, setup_logger
+Quantize any Hugging Face model in a single line -- with QEP, GPTQ 4-bit quantization,
+evaluation (perplexity + accuracy), and model saving all handled automatically:
 
-setup_logger()
+=== "Python"
 
-model_config = ModelConfig(
-    model_id="meta-llama/Llama-2-7b-hf",
-    device="cuda:0",
-)
-quantizer = GPTQ(wbits=4, groupsize=128)
+    ```python
+    from onecomp import Runner
 
-runner = Runner(model_config=model_config, quantizer=quantizer, qep=True)
-runner.run()
+    Runner.auto_run(model_id="meta-llama/Llama-2-7b-hf")
+    ```
 
-original_ppl, quantized_ppl = runner.calculate_perplexity()
-print(f"Original: {original_ppl:.2f}, Quantized: {quantized_ppl:.2f}")
-```
+=== "CLI"
+
+    ```bash
+    onecomp meta-llama/Llama-2-7b-hf
+    ```
+
+For full control over each step, see the [step-by-step workflow](user-guide/basic-usage.md#detailed-workflow).
 
 ## Getting Started
 

@@ -21,6 +21,9 @@ dependencies = [
     "scipy",
 ]
 
+[project.scripts]
+onecomp = "onecomp.cli:main"
+
 [project.optional-dependencies]
 cpu = ["torch"]
 cu118 = ["torch"]

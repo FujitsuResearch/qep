@@ -25,6 +25,7 @@ from .utils import calculate_perplexity
 from .utils import calculate_accuracy as calc_accuracy
 from .utils import prepare_calibration_dataset as prepare_calib_dataset
 from .__version__ import __version__
+from .log import setup_logger
 
 from pathlib import Path
 
@@ -73,7 +74,7 @@ class Runner:
 
     def __init__(
         self,
-        model_config,
+        model_config=None,
         calibration_dataset=None,
         max_length=512,
         num_calibration_samples=128,
@@ -341,6 +342,92 @@ class Runner:
                     avg_quant_time,
                     len(quant_times),
                 )
+
+    @classmethod
+    def auto_run(
+        cls,
+        model_id: str,
+        wbits: int = 4,
+        groupsize: int = 128,
+        device: str = "cuda:0",
+        qep: bool = True,
+        evaluate: bool = True,
+        save_dir: str = "auto",
+        **kwargs,
+    ):
+        """One-liner quantization with sensible defaults.
+
+        Sets up ModelConfig, GPTQ quantizer, and QEP, then runs quantization.
+        Optionally evaluates perplexity and accuracy, and saves the
+        quantized model.
+
+        Args:
+            model_id (str): Hugging Face model ID or local path.
+            wbits (int): Quantization bit width (default: 4).
+            groupsize (int): GPTQ group size (default: 128).
+                Use -1 to disable grouping.
+            device (str): Device to place the model on (default: "cuda:0").
+            qep (bool): Whether to use QEP (default: True).
+            evaluate (bool): Whether to calculate perplexity and
+                accuracy after quantization (default: True).
+            save_dir (str or None): Directory to save the quantized model.
+                ``"auto"`` (default) derives the path from model_id
+                (e.g., ``"TinyLlama-1.1B-intermediate-step-1431k-3T-gptq-4bit"``).
+                Set to ``None`` to skip saving.
+            **kwargs: Additional keyword arguments forwarded to the
+                ``GPTQ`` constructor (e.g., ``actorder``, ``sym``).
+
+        Returns:
+            Runner: The configured Runner instance (with quantization
+            results accessible via ``runner.quantizer.results``).
+
+        Examples:
+            Minimal usage (QEP + GPTQ 4-bit, groupsize=128, auto-save):
+
+            >>> from onecomp import Runner
+            >>> runner = Runner.auto_run(
+            ...     model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
+            ... )
+
+            Custom save directory:
+
+            >>> runner = Runner.auto_run(
+            ...     model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
+            ...     save_dir="./my_quantized_model",
+            ... )
+
+            Skip saving:
+
+            >>> runner = Runner.auto_run(
+            ...     model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
+            ...     save_dir=None,
+            ... )
+        """
+        setup_logger()
+        logger = getLogger(__name__)
+
+        if save_dir == "auto":
+            model_name = model_id.rstrip("/").split("/")[-1]
+            save_dir = f"{model_name}-gptq-{wbits}bit"
+
+        model_config = ModelConfig(model_id=model_id, device=device)
+        quantizer = GPTQ(wbits=wbits, groupsize=groupsize, **kwargs)
+        runner = cls(model_config=model_config, quantizer=quantizer, qep=qep)
+        runner.run()
+
+        if evaluate:
+            original_ppl, quantized_ppl = runner.calculate_perplexity()
+            logger.info("Original model perplexity: %s", original_ppl)
+            logger.info("Quantized model perplexity: %s", quantized_ppl)
+
+            original_acc, quantized_acc = runner.calculate_accuracy()
+            logger.info("Original model accuracy: %s", original_acc)
+            logger.info("Quantized model accuracy: %s", quantized_acc)
+
+        if save_dir is not None:
+            runner.save_quantized_model(save_dir)
+
+        return runner
 
     def quantize(self):
         """Quantize the model
