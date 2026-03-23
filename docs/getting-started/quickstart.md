@@ -2,9 +2,68 @@
 
 This guide walks you through quantizing your first LLM with Fujitsu One Compression (OneComp).
 
-## Basic Quantization with GPTQ
+## The Fastest Way: `auto_run`
 
-The simplest workflow involves three components:
+`Runner.auto_run` handles everything -- model loading, GPTQ quantization with QEP,
+evaluation (perplexity + zero-shot accuracy), and saving the quantized model:
+
+=== "Python"
+
+    ```python
+    from onecomp import Runner
+
+    Runner.auto_run(model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T")
+    ```
+
+=== "CLI"
+
+    ```bash
+    onecomp TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
+    ```
+
+That's it. The quantized model is saved to
+`TinyLlama-1.1B-intermediate-step-1431k-3T-gptq-4bit/` by default.
+
+### `auto_run` Parameters
+
+| Parameter   | Default    | Description                                              |
+|-------------|------------|----------------------------------------------------------|
+| `model_id`  | (required) | Hugging Face model ID or local path                      |
+| `wbits`     | `4`        | Quantization bit width                                   |
+| `groupsize` | `128`      | GPTQ group size (`-1` to disable)                        |
+| `device`    | `"cuda:0"` | Device for computation                                   |
+| `qep`       | `True`     | Enable QEP (Quantization Error Propagation)              |
+| `evaluate`  | `True`     | Calculate perplexity and zero-shot accuracy              |
+| `save_dir`  | `"auto"`   | Save directory (`"auto"` = derived from model name, `None` to skip) |
+
+### Examples
+
+```python
+from onecomp import Runner
+
+# 3-bit quantization, no QEP, skip saving
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    wbits=3,
+    qep=False,
+    save_dir=None,
+)
+
+# Custom save directory, skip evaluation
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    save_dir="./my_quantized_model",
+    evaluate=False,
+)
+```
+
+---
+
+## Step-by-step Workflow
+
+For full control over each component, use the manual configuration approach.
+
+The workflow involves three components:
 
 1. **ModelConfig** -- specifies which model to quantize
 2. **Quantizer** (e.g., GPTQ) -- defines the quantization method and parameters
@@ -13,19 +72,14 @@ The simplest workflow involves three components:
 ```python
 from onecomp import ModelConfig, Runner, GPTQ, setup_logger
 
-# Enable logging to see progress
 setup_logger()
 
-# 1. Configure the model
 model_config = ModelConfig(
     model_id="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
     device="cuda:0",
 )
-
-# 2. Choose a quantizer
 gptq = GPTQ(wbits=4, groupsize=128)
 
-# 3. Create the runner and quantize
 runner = Runner(model_config=model_config, quantizer=gptq)
 runner.run()
 ```
@@ -53,7 +107,7 @@ QEP compensates for error propagation across layers, improving quantization qual
 runner = Runner(
     model_config=model_config,
     quantizer=gptq,
-    qep=True,  # Enable QEP
+    qep=True,
 )
 runner.run()
 ```
@@ -64,8 +118,8 @@ For fine-grained control over QEP, use `QEPConfig`:
 from onecomp import QEPConfig
 
 qep_config = QEPConfig(
-    percdamp=0.01,     # Hessian damping
-    perccorr=0.5,      # Correction strength
+    percdamp=0.01,
+    perccorr=0.5,
 )
 runner = Runner(
     model_config=model_config,
@@ -100,6 +154,7 @@ model, tokenizer = load_quantized_model("./output/quantized_model")
 
 ## Next Steps
 
+- [CLI Reference](../user-guide/cli.md) -- full CLI options and usage
 - [Configuration](../user-guide/configuration.md) -- detailed explanation of `ModelConfig`, `QEPConfig`, and `Runner` parameters
 - [Examples](../user-guide/examples.md) -- more usage patterns including multi-GPU and chunked calibration
 - [Algorithms](../algorithms/overview.md) -- learn about the quantization algorithms available in OneComp

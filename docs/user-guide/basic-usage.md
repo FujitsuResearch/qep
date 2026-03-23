@@ -2,7 +2,32 @@
 
 This guide covers the core workflow of Fujitsu One Compression (OneComp): configure a model, select a quantizer, run quantization, and evaluate results.
 
-## Workflow Overview
+## Quick Path: `Runner.auto_run()`
+
+For the common case of GPTQ + QEP quantization, `auto_run` handles everything in one call:
+
+```python
+from onecomp import Runner
+
+runner = Runner.auto_run(model_id="meta-llama/Llama-2-7b-hf")
+```
+
+This automatically:
+
+1. Loads the model and tokenizer
+2. Quantizes with GPTQ (4-bit, groupsize=128) + QEP
+3. Evaluates perplexity and zero-shot accuracy
+4. Saves the quantized model to disk
+
+The returned `runner` instance gives access to quantization results for further analysis.
+See the [Quick Start](../getting-started/quickstart.md) for `auto_run` parameters, or use
+the [CLI](cli.md) for command-line usage.
+
+---
+
+## Detailed Workflow
+
+For full control over each component, use the manual configuration approach.
 
 ```
 ModelConfig ──┐

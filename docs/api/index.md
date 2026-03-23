@@ -28,7 +28,9 @@ The following are available directly from `import onecomp`:
 
 ```
 onecomp/
-    runner.py              # Runner class
+    runner.py              # Runner class (includes auto_run)
+    cli.py                 # CLI entry point (onecomp command)
+    __main__.py            # python -m onecomp support
     model_config.py        # ModelConfig class
     qep/                   # QEP module
         _qep_config.py     # QEPConfig dataclass

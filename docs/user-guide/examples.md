@@ -2,6 +2,53 @@
 
 This page demonstrates common usage patterns beyond the basic workflow.
 
+## One-liner with `auto_run`
+
+The simplest way to quantize a model:
+
+```python
+from onecomp import Runner
+
+# Default: QEP + GPTQ 4-bit, groupsize=128, evaluation, and auto-save
+Runner.auto_run(model_id="meta-llama/Llama-2-7b-hf")
+
+# 3-bit, custom save directory
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    wbits=3,
+    save_dir="./llama2-7b-gptq-3bit",
+)
+
+# Without QEP, skip evaluation
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    qep=False,
+    evaluate=False,
+)
+```
+
+## CLI
+
+The `onecomp` command provides the same functionality from the terminal:
+
+```bash
+# Default (QEP + GPTQ 4-bit, evaluate, auto-save)
+onecomp meta-llama/Llama-2-7b-hf
+
+# 3-bit, custom save directory
+onecomp meta-llama/Llama-2-7b-hf --wbits 3 --save-dir ./llama2-7b-gptq-3bit
+
+# Without QEP, skip evaluation
+onecomp meta-llama/Llama-2-7b-hf --no-qep --no-eval
+
+# Skip saving
+onecomp meta-llama/Llama-2-7b-hf --save-dir none
+```
+
+See the [CLI Reference](cli.md) for all options.
+
+---
+
 ## GPTQ with QEP (3-bit)
 
 Quantize a model using GPTQ at 3-bit precision with QEP to improve quality:
