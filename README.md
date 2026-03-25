@@ -7,6 +7,7 @@ This package is currently under development (version 0) and may behave unstably.
 ## 📦 Features
 
 - **Quantization Error Propagation (QEP)**: A post-training quantization method that corrects quantization errors by propagating them to subsequent layers, improving the accuracy of quantized LLMs. See [Arai & Ichikawa, NeurIPS 2025](https://openreview.net/forum?id=a3l3K9khbL) for details.
+- **vLLM Plugin Integration**: Serve OneComp-quantized models with [vLLM](https://docs.vllm.ai/) via built-in plugins for DBF and Mixed-GPTQ quantization methods.
 - (TBD)
 
 ## 🔧 Installation
@@ -133,6 +134,10 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 ## 🚀 Example
 
 See [example/example1.py](./example/example1.py) and [example/example2.py](./example/example2.py) for more details.
+
+## 🔌 vLLM Inference
+
+OneComp-quantized models can be served with [vLLM](https://docs.vllm.ai/) via built-in plugins (DBF, Mixed-GPTQ). Install vLLM separately (`pip install vllm`) and see the [vLLM Inference guide](https://FujitsuResearch.github.io/OneCompression/user-guide/vllm-inference/) for details.
 
 
 ## 📄 License

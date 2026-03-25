@@ -12,12 +12,15 @@ Usage:
     python tests/onecomp/fixtures/generate_qep_gptq_reference.py
 """
 
+import logging
 from pathlib import Path
 
 from onecomp import ModelConfig, Runner
 from onecomp.qep import QEPConfig
 from onecomp.quantizer.gptq import GPTQ
 from onecomp import setup_logger
+
+logger = logging.getLogger(__name__)
 
 
 def run_qep_gptq_quantization():
@@ -71,7 +74,7 @@ def generate_qep_gptq_reference():
     # Save quantization statistics (saved in the same directory as this script)
     output_path = Path(__file__).parent / "qep_gptq_reference.json"
     runner.save_quantization_statistics(str(output_path))
-    print(f"\nReference data saved to: {output_path}")
+    logger.info(f"Reference data saved to: {output_path}")
 
     # Generate and save cumulative error reference data
     cumulative_error_path = Path(__file__).parent / "qep_gptq_cumulative_error_reference.json"
@@ -79,7 +82,7 @@ def generate_qep_gptq_reference():
         layer_keywords=["mlp.down_proj", "self_attn.o_proj"],
         json_path=str(cumulative_error_path),
     )
-    print(f"Cumulative error reference saved to: {cumulative_error_path}")
+    logger.info(f"Cumulative error reference saved to: {cumulative_error_path}")
 
 
 if __name__ == "__main__":

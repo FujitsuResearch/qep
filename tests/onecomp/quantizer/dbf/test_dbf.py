@@ -5,8 +5,9 @@ Copyright 2025-2026 Fujitsu Ltd.
 Author: Keiji Kimura
 """
 
-import sys
+import logging
 import os
+import sys
 import torch
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -48,6 +49,7 @@ class TestDBF(BaseQuantizeSpec):
         {"balance_iters": -1},
         {"balance_alpha": -1.0},
     ]
+    logger = logging.getLogger(__name__)
 
     def check_quantize_layer(
         self,
@@ -108,7 +110,7 @@ class TestDBF(BaseQuantizeSpec):
         max_error_dequantized_vs_applied,
     ):
         """Validate forward errors."""
-        print(
+        self.logger.info(
             "[DBF forward error] "
             f"original_vs_dbf(rel={error_original_vs_dequantized:.8f}), "
             f"dbf_vs_dbl(max={max_error_dequantized_vs_applied:.8f}), "

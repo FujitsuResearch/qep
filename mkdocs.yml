@@ -83,6 +83,7 @@ nav:
       - Basic Usage: user-guide/basic-usage.md
       - CLI: user-guide/cli.md
       - Configuration: user-guide/configuration.md
+      - vLLM Inference: user-guide/vllm-inference.md
       - Examples: user-guide/examples.md
   - Algorithms:
       - Overview: algorithms/overview.md

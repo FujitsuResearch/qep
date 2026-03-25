@@ -1399,7 +1399,7 @@ class Runner:
                 )
                 logger.debug("Updated the model weights for layer: %s", name)
 
-    def _create_quantized_model(self, pack_weights: bool = True, quantizer=None):
+    def _create_quantized_model(self, pack_weights: bool = True, quantizer=None, use_gemlite=None):
         """Create the quantized model.
 
         Args:
@@ -1407,6 +1407,9 @@ class Runner:
                 Whether to pack quantized weights.
             quantizer (Quantizer, optional):
                 The quantizer to use. Uses self.quantizer if None.
+            use_gemlite (bool or None):
+                Whether to use GemLite for inference layers.
+                Set to False when saving to avoid extra params in safetensors.
         """
         if quantizer is None:
             quantizer = self.quantizer
@@ -1420,7 +1423,7 @@ class Runner:
 
         # Replace Linear layers with quantized layers using quantizer.results
         self.logger.info("Replacing Linear layers with quantized inference layers...")
-        quantizer.apply_results_to_model(model, pack_weights=pack_weights)
+        quantizer.apply_results_to_model(model, pack_weights=pack_weights, use_gemlite=use_gemlite)
 
         # Build modules_in_block_to_quantize from actually-quantized layer names.
         quantized_names = sorted(quantizer.results.keys())
@@ -1462,8 +1465,10 @@ class Runner:
         logger = self.logger
         logger.info("Saving quantized model to %s", save_directory)
 
-        # This will apply quantization to the model in-place
-        model, tokenizer = self._create_quantized_model(pack_weights=pack_weights)
+        # Disable GemLite when saving to avoid extra params in safetensors
+        model, tokenizer = self._create_quantized_model(
+            pack_weights=pack_weights, use_gemlite=False
+        )
 
         # Save model and tokenizer
         save_path = Path(save_directory)

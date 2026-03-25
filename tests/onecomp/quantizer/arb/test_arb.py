@@ -1,4 +1,7 @@
-"""Tests for the ARB quantizer implementation."""
+"""Tests for the ARB quantizer implementation.
+
+Copyright 2025-2026 Fujitsu Ltd.
+"""
 
 import sys
 import os
