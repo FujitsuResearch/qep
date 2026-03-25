@@ -212,7 +212,7 @@ class GPTQ(Quantizer):
         return default_groupsize
 
     def validate_params(self):
-        """Validate GPTQ parameters once at quantizer initialization."""
+        """Validate GPTQ parameters once in setup()."""
         bad = []
 
         if not (isinstance(self.blocksize, int) and self.blocksize >= 1):

@@ -89,6 +89,28 @@ class RTN(Quantizer):
     groupsize: int = -1
     sym: bool = False
 
+    def validate_params(self):
+        """Validate RTN parameters once in setup().
+
+        Validated ranges:
+            wbits: int, 1 <= wbits <= 64
+            groupsize: int, -1 or >= 1
+            sym: bool (no constraint)
+        """
+        bad = []
+
+        if not (isinstance(self.wbits, int) and 1 <= self.wbits <= 64):
+            bad.append(f"Invalid RTN parameter 'wbits': {self.wbits!r} (expected int in 1..64).")
+
+        if not (isinstance(self.groupsize, int) and (self.groupsize == -1 or 1 <= self.groupsize)):
+            bad.append(
+                f"Invalid RTN parameter 'groupsize': {self.groupsize!r} "
+                f"(expected int: -1 for no grouping, or 1<= groupsize)."
+            )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using RTN.
 
@@ -101,7 +123,17 @@ class RTN(Quantizer):
         Returns:
             RTNResult: RTN quantization result object containing quantized
                 weights and parameters.
+
+        Raises:
+            ValueError: If groupsize does not divide in_features.
         """
+        if self.groupsize > 0:
+            in_features = module.weight.shape[-1]
+            if in_features % self.groupsize != 0:
+                raise ValueError(
+                    f"groupsize={self.groupsize} does not divide " f"in_features={in_features}."
+                )
+
         result_dict = run_rtn(
             module,
             wbits=self.wbits,

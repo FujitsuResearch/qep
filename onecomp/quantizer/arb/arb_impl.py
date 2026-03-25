@@ -88,8 +88,8 @@ def run_arb(
     dequantized_weight = Q.reshape(layer.weight.shape).to(layer.weight.data.dtype).cpu()
     quantized_weight = B_int.reshape(layer.weight.shape).cpu()
 
-    alpha = alpha.cpu()
-    mu = mu.cpu()
+    alpha = alpha.to(dtype=torch.float16, device="cpu")
+    mu = mu.to(dtype=torch.float16, device="cpu")
 
     del W, Q, B, B_int
     gc.collect()

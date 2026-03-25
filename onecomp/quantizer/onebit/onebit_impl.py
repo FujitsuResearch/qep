@@ -192,9 +192,9 @@ def run_onebit(
     )
 
     # Save decomposition results
-    weight_a = a.cpu()
-    weight_b = b.cpu()
-    weight_sign = W_sign.cpu()
+    weight_a = a.to(dtype=torch.float16, device="cpu")
+    weight_b = b.to(dtype=torch.float16, device="cpu")
+    weight_sign = W_sign.to(dtype=torch.float16, device="cpu")
 
     # Check error
     err = (W_reconstructed - W_original).square().sum().item()

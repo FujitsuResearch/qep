@@ -250,6 +250,9 @@ class BaseQuantizeSpec:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_cpu_gpu_output_match(self, helper):
         """Validate that CPU and GPU quantization results match."""
+        helper.set_deterministic()
+        helper.seed_everything(123)
+
         cpu_layer = helper.make_linear(8, 8, device="cpu", dtype=torch.float32)
         gpu_layer = helper.make_linear(8, 8, device="cuda", dtype=torch.float32)
         gpu_layer.weight.data.copy_(cpu_layer.weight.data.to("cuda"))
@@ -375,11 +378,19 @@ class BaseQuantizeSpec:
             y_dequantized = dequantized_layer(inp)
 
         # Apply quantized weights to the original layer for inference.
-        dbl = q.create_inference_layer(
-            result=result,
-            linear_module=layer,
-            use_gemlite=False,
-        )
+        try:
+            dbl = q.create_inference_layer(
+                result=result,
+                linear_module=layer,
+                use_gemlite=False,
+            )
+        except NotImplementedError as e:
+            pytest.fail(
+                f"create_inference_layer() is not implemented for {type(q).__name__}. "
+                "Implement create_inference_layer() to enable this forward-error test, "
+                "or override test_forward_error() in the quantizer-specific test to skip explicitly. "
+                f"Original error: {e}"
+            )
 
         # Run the forward pass with quantized weights
         with torch.no_grad():

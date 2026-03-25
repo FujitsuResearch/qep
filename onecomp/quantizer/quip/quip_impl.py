@@ -156,16 +156,16 @@ def run_quip(
     quantized_weight = Q_int.reshape(layer.weight.shape).cpu()
 
     if quantizer.qfn == "b":
-        scale_final = scale_actual.cpu()
+        scale_final = scale_actual.to(dtype=torch.float16, device="cpu")
         zero = None
     else:
-        scale_final = quantizer.scale.cpu()
+        scale_final = quantizer.scale.to(dtype=torch.float16, device="cpu")
         if quantizer.zero is not None:
-            zero = quantizer.zero.cpu()
+            zero = quantizer.zero.to(dtype=torch.float16, device="cpu")
         else:
             zero = None
 
-    maxq = quantizer.maxq.cpu()
+    maxq = quantizer.maxq.to(dtype=torch.float16, device="cpu")
 
     del H, W, Q, Q_int, U, V, scaleWH
     gc.collect()
