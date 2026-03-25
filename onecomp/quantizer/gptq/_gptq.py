@@ -7,8 +7,11 @@ Author: Yuma Ichikawa, Keiji Kimura
 """
 
 from dataclasses import dataclass
+import logging
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 import gc
 
@@ -524,7 +527,7 @@ def run_gptq(  # pylint: disable=too-many-positional-arguments
 
         # Per-block progress display
         # if block_idx % 10 == 0 or block_idx == total_blocks - 1:
-        #    print(f"[GPTQ Block {block_idx}/{total_blocks-1}] Processing columns {i1}-{i2-1}")
+        #    logger.debug(f"[GPTQ Block {block_idx}/{total_blocks-1}] Processing columns {i1}-{i2-1}")
 
         W1 = matrix_W[:, i1:i2].clone()
         Q1_int = torch.zeros_like(W1, dtype=torch.int32)

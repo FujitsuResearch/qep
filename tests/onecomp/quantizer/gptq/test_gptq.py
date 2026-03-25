@@ -5,8 +5,9 @@ Copyright 2025-2026 Fujitsu Ltd.
 Author: Keiji Kimura
 """
 
-import sys
+import logging
 import os
+import sys
 import torch
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -48,6 +49,7 @@ class TestGPTQ(BaseQuantizeSpec):
         {"q_grid": -1, "mse": True},
         {"q_norm": 0.0, "mse": True},
     ]
+    logger = logging.getLogger(__name__)
 
     def check_quantize_layer(
         self,
@@ -114,7 +116,7 @@ class TestGPTQ(BaseQuantizeSpec):
         max_error_dequantized_vs_applied,
     ):
         """Validate forward errors."""
-        print(
+        self.logger.info(
             "[GPTQ forward error] "
             f"original_vs_gptq(rel={error_original_vs_dequantized:.8f}), "
             f"gptq_vs_gptql(max={max_error_dequantized_vs_applied:.8f}), "

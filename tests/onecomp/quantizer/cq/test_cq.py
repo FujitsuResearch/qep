@@ -1,4 +1,7 @@
-"""Tests for the CQ quantizer implementation."""
+"""Tests for the CQ quantizer implementation.
+
+Copyright 2025-2026 Fujitsu Ltd.
+"""
 
 import sys
 import os

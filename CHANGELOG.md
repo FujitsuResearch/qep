@@ -9,9 +9,18 @@
   - Shared test base and helpers updated in `tests/onecomp/quantizer/test_module.py`
   - Quantizer implementations adjusted for test compatibility: `onecomp/quantizer/qbb/`, `onecomp/quantizer/rtn/`, `onecomp/quantizer/quip/`, `onecomp/quantizer/onebit/`, `onecomp/quantizer/arb/`, `onecomp/quantizer/jointq/` (and related `*_impl.py`); minor updates in `onecomp/quantizer/dbf/_dbf.py`, `onecomp/quantizer/gptq/_gptq.py`
 
+### vLLM plugin integration (DBF, Mixed-GPTQ)
+
+- **Added vLLM plugin implementation for DBF and Mixed-GPTQ**
+  - New `vllm_plugins` package: `vllm_plugins/__init__.py`, DBF and GPTQ plugin entry points (`vllm_plugins/dbf/`, `vllm_plugins/gptq/`)
+  - DBF: `vllm_plugins/dbf/vllm_plugin.py` and modules (`vllm_plugins/dbf/modules/gemlite_linear.py`, `vllm_plugins/dbf/modules/naive.py`); shared utilities in `vllm_plugins/utils/module.py`
+  - GPTQ: `vllm_plugins/gptq/vllm_plugin.py` for Mixed-GPTQ inference
+  - Tests: `tests/vllm-plugins/dbf/test_dbf_gemlite.py`, `tests/vllm-plugins/dbf/test_dbf_naive.py`
+  - Package and dependency wiring in `pyproject.toml`
+
 ### Fixes
 
-- **Resolved TabError in `_jointq.py`** (`onecomp/quantizer/jointq/_jointq.py`)
+- **Mixed-GPTQ:** raise an error when quantization bit widths differ within the same shard (align with DBF behavior) (`vllm_plugins/gptq/vllm_plugin.py`)
 
 ## [v0.4.1] 2026-03-19
 
