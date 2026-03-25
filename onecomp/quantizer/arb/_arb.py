@@ -90,6 +90,28 @@ class ARB(Quantizer):
     split_points: int = 2
     verbose: bool = False
 
+    def validate_params(self):
+        """Validate ARB parameters once in setup().
+
+        Validated ranges:
+            arb_iters: int >= 0
+            split_points: int >= 1
+        """
+        bad = []
+
+        if not (isinstance(self.arb_iters, int) and self.arb_iters >= 0):
+            bad.append(
+                f"Invalid ARB parameter 'arb_iters': {self.arb_iters!r} (expected int >= 0)."
+            )
+
+        if not (isinstance(self.split_points, int) and self.split_points >= 1):
+            bad.append(
+                f"Invalid ARB parameter 'split_points': {self.split_points!r} (expected int >= 1)."
+            )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using ARB.
 

@@ -164,7 +164,7 @@ class DBF(Quantizer):
         return default_bits
 
     def validate_params(self):
-        """Validate DBF parameters once at quantizer initialization."""
+        """Validate DBF parameters once in setup()."""
         bad = []
 
         if (

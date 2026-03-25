@@ -90,6 +90,34 @@ class QUIP(Quantizer):
     percdamp: float = 0.01
     incoh_mode: str = "kron"
 
+    def validate_params(self):
+        """Validate QUIP parameters once in setup().
+
+        Validated ranges:
+            wbits: int, 1 <= wbits <= 63
+            percdamp: float >= 0
+            incoh_mode: str in {"kron", "had"}
+        """
+        bad = []
+
+        if not (isinstance(self.wbits, int) and 1 <= self.wbits <= 63):
+            bad.append(f"Invalid QUIP parameter 'wbits': {self.wbits!r} (expected int in 1..63).")
+
+        if not (isinstance(self.percdamp, (int, float)) and self.percdamp >= 0):
+            bad.append(
+                f"Invalid QUIP parameter 'percdamp': {self.percdamp!r} (expected numeric >= 0)."
+            )
+
+        allowed_incoh_modes = {"kron", "had"}
+        if not (isinstance(self.incoh_mode, str) and self.incoh_mode in allowed_incoh_modes):
+            bad.append(
+                f"Invalid QUIP parameter 'incoh_mode': {self.incoh_mode!r} "
+                f"(expected one of {sorted(allowed_incoh_modes)})."
+            )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(self, module, input, hessian=None):
         """Quantize a layer using QUIP.
 

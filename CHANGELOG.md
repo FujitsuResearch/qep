@@ -1,5 +1,18 @@
 # Change log
 
+## [v0.4.2] 2026-03-25
+
+### Unit tests for additional quantizers
+
+- **Added unit tests for QBB, RTN, QUIP, ONEBIT, CQ, ARB, and JOINTQ**
+  - New test modules under `tests/onecomp/quantizer/`: `test_qbb.py`, `test_rtn.py`, `test_quip.py`, `test_onebit.py`, `test_cq.py`, `test_arb.py`, `test_jointq.py`
+  - Shared test base and helpers updated in `tests/onecomp/quantizer/test_module.py`
+  - Quantizer implementations adjusted for test compatibility: `onecomp/quantizer/qbb/`, `onecomp/quantizer/rtn/`, `onecomp/quantizer/quip/`, `onecomp/quantizer/onebit/`, `onecomp/quantizer/arb/`, `onecomp/quantizer/jointq/` (and related `*_impl.py`); minor updates in `onecomp/quantizer/dbf/_dbf.py`, `onecomp/quantizer/gptq/_gptq.py`
+
+### Fixes
+
+- **Resolved TabError in `_jointq.py`** (`onecomp/quantizer/jointq/_jointq.py`)
+
 ## [v0.4.1] 2026-03-19
 
 ### Mixed GPTQ/DBF Save/Load

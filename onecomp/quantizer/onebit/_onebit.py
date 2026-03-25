@@ -80,6 +80,35 @@ class Onebit(Quantizer):
     balance_iters: int = 40
     balance_alpha: float = 1.0
 
+    def validate_params(self):
+        """Validate OneBit parameters once in setup().
+
+        Validated ranges:
+            iters: int >= 0
+            balance_iters: int >= 1 (when use_balancing=True)
+            balance_alpha: float > 0 (when use_balancing=True)
+        """
+        bad = []
+
+        if not (isinstance(self.iters, int) and self.iters >= 0):
+            bad.append(f"Invalid OneBit parameter 'iters': {self.iters!r} (expected int >= 0).")
+
+        if self.use_balancing:
+            if not (isinstance(self.balance_iters, int) and self.balance_iters >= 1):
+                bad.append(
+                    f"Invalid OneBit parameter 'balance_iters': {self.balance_iters!r} "
+                    f"(expected int >= 1 when use_balancing=True)."
+                )
+
+            if not (isinstance(self.balance_alpha, (int, float)) and self.balance_alpha > 0):
+                bad.append(
+                    f"Invalid OneBit parameter 'balance_alpha': {self.balance_alpha!r} "
+                    f"(expected numeric > 0 when use_balancing=True)."
+                )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(self, module, input=None, hessian=None):
         """Quantize the layer.
 
