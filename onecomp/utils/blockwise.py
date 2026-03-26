@@ -2,7 +2,7 @@
 
 Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Yudai Fujimoto, Akihiro Yoshida
+Author: Yudai Fujimoto, Akihiro Yoshida, Yuma Ichikawa
 
 """
 
@@ -135,7 +135,7 @@ def get_blocks_and_inputs(
     except StopForward:
         pass
     kwargs = dict(blocks[0].kwargs)  # shallow-copy before next loop overwrites
-    blocks[0].inp = None              # release single-sample activation (no longer needed)
+    blocks[0].inp = None  # release single-sample activation (no longer needed)
 
     # Now capture block inputs for all calibration samples.
     block_inps = []

@@ -3,7 +3,7 @@ Architecture-aware Quantization with QEP Module
 
 Copyright 2025-2026 Fujitsu Ltd.
 
-Author: Yudai Fujimoto
+Author: Yudai Fujimoto, Yuma Ichikawa
 
 An architecture-aware implementation that exploits model structure to
 reduce redundant forward passes and memory consumption.
@@ -235,9 +235,7 @@ def run_quantize_with_qep_arch(
     # via the block loop) do not prevent early termination.
     block_modules = {m for block in blocks for m in block.modules()}
     remaining_targets = {
-        name
-        for module, name in quantizer.module_to_name.items()
-        if module in block_modules
+        name for module, name in quantizer.module_to_name.items() if module in block_modules
     }
 
     # 2. For each target transformer block, perform the following sequentially
