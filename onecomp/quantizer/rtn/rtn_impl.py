@@ -75,8 +75,8 @@ def run_rtn(
     dequantized_weight = Q.reshape(layer.weight.shape).to(layer.weight.data.dtype).cpu()
     quantized_weight = Q_int.reshape(layer.weight.shape).cpu()
 
-    scale = scale.reshape(-1, scale.shape[-1]).cpu()
-    zero = zero_point.reshape(-1, zero_point.shape[-1]).cpu()
+    scale = scale.reshape(-1, scale.shape[-1]).to(dtype=torch.float16, device="cpu")
+    zero = zero_point.reshape(-1, zero_point.shape[-1]).to(dtype=torch.float16, device="cpu")
 
     del W, Q, Q_int
     gc.collect()

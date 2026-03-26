@@ -5,8 +5,9 @@ Copyright 2025-2026 Fujitsu Ltd.
 Author: Keiji Kimura
 """
 
-import sys
+import logging
 import os
+import sys
 import torch
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -48,6 +49,7 @@ class TestDBF(BaseQuantizeSpec):
         {"balance_iters": -1},
         {"balance_alpha": -1.0},
     ]
+    logger = logging.getLogger(__name__)
 
     def check_quantize_layer(
         self,
@@ -90,7 +92,7 @@ class TestDBF(BaseQuantizeSpec):
 
     def check_equal_results(self, r1, r2):
         """Validate equality of quantization result objects."""
-        assert torch.equal(r1.dequantized_weight, r2.dequantized_weight)
+        assert torch.equal(r1.compute_dequantized_weight(), r2.compute_dequantized_weight())
         assert r1.is_dbf_quantized == r2.is_dbf_quantized
         assert torch.equal(r1.dbf_A, r2.dbf_A)
         assert torch.equal(r1.dbf_B, r2.dbf_B)
@@ -108,7 +110,7 @@ class TestDBF(BaseQuantizeSpec):
         max_error_dequantized_vs_applied,
     ):
         """Validate forward errors."""
-        print(
+        self.logger.info(
             "[DBF forward error] "
             f"original_vs_dbf(rel={error_original_vs_dequantized:.8f}), "
             f"dbf_vs_dbl(max={max_error_dequantized_vs_applied:.8f}), "
@@ -122,7 +124,8 @@ class TestDBF(BaseQuantizeSpec):
 
     def apply_quantized_weights(self, module, result, device):
         """Apply quantized weights to a module."""
-        module.weight.data = result.dequantized_weight.to(device)
+        dtype = module.weight.data.dtype
+        module.weight.data = result.compute_dequantized_weight().to(device).to(dtype)
         module.dbf_A = result.dbf_A.to(device)
         module.dbf_B = result.dbf_B.to(device)
         module.dbf_mid = result.dbf_mid.to(device)

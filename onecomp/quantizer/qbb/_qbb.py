@@ -102,6 +102,46 @@ class QBB(Quantizer):
     use_progressive_quantization: bool = False
     progressive_bits: int = 2
 
+    def validate_params(self):
+        """Validate QBB parameters once in setup().
+
+        Validated ranges:
+            wbits: int >= 1
+            iters_per_basis: int >= 0
+            lr: float >= 0
+            ste_type: str in {"clipped", "identity", "tanh"}
+            progressive_bits: int >= 2 (when use_progressive_quantization=True)
+        """
+        bad = []
+
+        if not (isinstance(self.wbits, int) and self.wbits >= 1):
+            bad.append(f"Invalid QBB parameter 'wbits': {self.wbits!r} (expected int >= 1).")
+
+        if not (isinstance(self.iters_per_basis, int) and self.iters_per_basis >= 0):
+            bad.append(
+                f"Invalid QBB parameter 'iters_per_basis': {self.iters_per_basis!r} (expected int >= 0)."
+            )
+
+        if not (isinstance(self.lr, (int, float)) and self.lr >= 0):
+            bad.append(f"Invalid QBB parameter 'lr': {self.lr!r} (expected numeric >= 0).")
+
+        allowed_stes = {"clipped", "identity", "tanh"}
+        if not (isinstance(self.ste_type, str) and self.ste_type in allowed_stes):
+            bad.append(
+                f"Invalid QBB parameter 'ste_type': {self.ste_type!r} "
+                f"(expected one of {sorted(allowed_stes)})."
+            )
+
+        if self.use_progressive_quantization:
+            if not (isinstance(self.progressive_bits, int) and self.progressive_bits >= 2):
+                bad.append(
+                    f"Invalid QBB parameter 'progressive_bits': {self.progressive_bits!r} "
+                    f"(expected int >= 2 when progressive quantization is enabled)."
+                )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(self, module, input=None, hessian=None):
         """Quantize a layer using QBB.
 

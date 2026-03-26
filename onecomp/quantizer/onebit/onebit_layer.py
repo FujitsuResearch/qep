@@ -9,12 +9,15 @@ Copyright 2025-2026 Fujitsu Ltd.
 Author: Yuma Ichikawa
 """
 
+import logging
 import traceback
 from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+
+logger = logging.getLogger(__name__)
 
 # ========================================
 # Bit packing / unpacking (same as DBF)
@@ -172,7 +175,7 @@ def replace_linear_with_onebit_layer(
         and hasattr(module.weight, "b")
         and hasattr(module.weight, "sign")
     ):
-        print("[OneBit] Module missing metadata (a, b, sign)")
+        logger.debug("[OneBit] Module missing metadata (a, b, sign)")
         return None
 
     try:
@@ -190,12 +193,14 @@ def replace_linear_with_onebit_layer(
         # Move to the original device
         onebit_layer = onebit_layer.to(module.weight.device)
 
-        print(f"[OneBit] Created OneBitLinear layer: {module.out_features}x{module.in_features}")
+        logger.debug(
+            f"[OneBit] Created OneBitLinear layer: {module.out_features}x{module.in_features}"
+        )
 
         return onebit_layer
 
     except Exception as e:
-        print(f"[OneBit] Error creating OneBitLinear: {e}")
+        logger.debug(f"[OneBit] Error creating OneBitLinear: {e}")
 
         traceback.print_exc()
         return None
@@ -226,7 +231,7 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
     elif hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers
     else:
-        print("[OneBit] Unsupported model structure")
+        logger.debug("[OneBit] Unsupported model structure")
         return onebit_weights
 
     # Recursively search all layers and submodules
@@ -259,7 +264,7 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
                     found_count += 1
 
                 except Exception as e:
-                    print(f"[OneBit] Error extracting weights for {current_path}: {e}")
+                    logger.debug(f"[OneBit] Error extracting weights for {current_path}: {e}")
 
                     traceback.print_exc()
 
@@ -301,7 +306,7 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
                         found_count += 1
 
                     except Exception as e:
-                        print(f"[OneBit] Error extracting weights for {current_path}: {e}")
+                        logger.debug(f"[OneBit] Error extracting weights for {current_path}: {e}")
 
             # Recursively search child modules
             found_count += find_onebit_modules(submodule, layer_idx, current_path)
@@ -317,5 +322,5 @@ def extract_onebit_weights_for_save(model: torch.nn.Module) -> dict:
         if i % 5 == 0 and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    print(f"[OneBit] Total OneBit modules found: {total_found}")
+    logger.debug(f"[OneBit] Total OneBit modules found: {total_found}")
     return onebit_weights

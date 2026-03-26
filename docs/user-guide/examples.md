@@ -9,14 +9,17 @@ The simplest way to quantize a model:
 ```python
 from onecomp import Runner
 
-# Default: QEP + GPTQ 4-bit, groupsize=128, evaluation, and auto-save
+# Default: AutoBit (VRAM auto-estimation, ILP mixed-precision) + QEP
 Runner.auto_run(model_id="meta-llama/Llama-2-7b-hf")
 
-# 3-bit, custom save directory
+# Specify VRAM budget
+Runner.auto_run(model_id="meta-llama/Llama-2-7b-hf", total_vram_gb=8)
+
+# Fixed 4-bit, custom save directory
 Runner.auto_run(
     model_id="meta-llama/Llama-2-7b-hf",
-    wbits=3,
-    save_dir="./llama2-7b-gptq-3bit",
+    wbits=4,
+    save_dir="./llama2-7b-gptq-4bit",
 )
 
 # Without QEP, skip evaluation
@@ -25,6 +28,12 @@ Runner.auto_run(
     qep=False,
     evaluate=False,
 )
+
+# Also evaluate the original model for comparison
+Runner.auto_run(
+    model_id="meta-llama/Llama-2-7b-hf",
+    eval_original_model=True,
+)
 ```
 
 ## CLI
@@ -32,14 +41,20 @@ Runner.auto_run(
 The `onecomp` command provides the same functionality from the terminal:
 
 ```bash
-# Default (QEP + GPTQ 4-bit, evaluate, auto-save)
+# Default (AutoBit with VRAM auto-estimation + QEP)
 onecomp meta-llama/Llama-2-7b-hf
 
-# 3-bit, custom save directory
-onecomp meta-llama/Llama-2-7b-hf --wbits 3 --save-dir ./llama2-7b-gptq-3bit
+# Specify VRAM budget
+onecomp meta-llama/Llama-2-7b-hf --total-vram-gb 8
+
+# Fixed 4-bit, custom save directory
+onecomp meta-llama/Llama-2-7b-hf --wbits 4 --save-dir ./llama2-7b-gptq-4bit
 
 # Without QEP, skip evaluation
 onecomp meta-llama/Llama-2-7b-hf --no-qep --no-eval
+
+# Also evaluate the original model
+onecomp meta-llama/Llama-2-7b-hf --eval-original
 
 # Skip saving
 onecomp meta-llama/Llama-2-7b-hf --save-dir none
@@ -67,8 +82,7 @@ gptq = GPTQ(wbits=3)
 runner = Runner(model_config=model_config, quantizer=gptq, qep=True)
 runner.run()
 
-original_ppl, quantized_ppl = runner.calculate_perplexity()
-print(f"Original model perplexity: {original_ppl}")
+_, _, quantized_ppl = runner.calculate_perplexity()
 print(f"Quantized model perplexity: {quantized_ppl}")
 ```
 

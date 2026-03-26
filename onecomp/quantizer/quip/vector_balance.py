@@ -78,7 +78,7 @@ def round_allbal(  # pylint: disable=too-many-positional-arguments
         w_hat.copy_(wr)
 
     wr_counts = check_nbits(wr, nbits)
-    # print(f"m:{m}, d:{d}")
+    # logger.debug(f"m:{m}, d:{d}")
     if calc_entropy:
         calc_entropy(wr_counts)
     return wr
@@ -135,7 +135,7 @@ def round_allbal_block(  # pylint: disable=too-many-positional-arguments
         w_hat.copy_(wr)
 
     wr_counts = check_nbits(wr, nbits)
-    # print(f"m:{m}, d:{d}")
+    # logger.debug(f"m:{m}, d:{d}")
     if calc_entropy:
         calc_entropy(wr_counts)
     return wr

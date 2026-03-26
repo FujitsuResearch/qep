@@ -83,6 +83,7 @@ nav:
       - Basic Usage: user-guide/basic-usage.md
       - CLI: user-guide/cli.md
       - Configuration: user-guide/configuration.md
+      - vLLM Inference: user-guide/vllm-inference.md
       - Examples: user-guide/examples.md
   - Algorithms:
       - Overview: algorithms/overview.md
@@ -97,6 +98,7 @@ nav:
       - QEPConfig: api/qep_config.md
       - Quantizers:
           - Base Classes: api/quantizers/base.md
+          - AutoBit: api/quantizers/autobit.md
           - GPTQ: api/quantizers/gptq.md
           - DBF: api/quantizers/dbf.md
           - RTN: api/quantizers/rtn.md

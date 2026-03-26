@@ -10,7 +10,7 @@ from abc import ABCMeta
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import Union
+from typing import Any, Optional, Union
 
 import time
 import math
@@ -26,7 +26,8 @@ class QuantizationResult:
     method-specific parameters as fields.
 
     Attributes:
-        dequantized_weight: Dequantized weights (FP16) - required.
+        dequantized_weight: Dequantized weights (FP16).
+            None when compute_dequantized_weight() is overridden by subclass.
         quantization_time: Time taken for quantization (seconds).
         output_squared_error: Output squared error (when calc_quant_error=True).
         mean_output_squared_error: Output mean squared error (when calc_quant_error=True).
@@ -38,7 +39,7 @@ class QuantizationResult:
             ||W - Ŵ||²_F / ||W||²_F (when calc_quant_error=True).
     """
 
-    dequantized_weight: torch.Tensor
+    dequantized_weight: torch.Tensor = None
 
     # Quantization metadata
     quantization_time: float = None
@@ -63,15 +64,15 @@ class QuantizationResult:
                 quantization parameters reside.
 
         Returns:
-            torch.Tensor: Dequantized weight tensor.
-
-        Raises:
-            NotImplementedError: Not implemented in the base class.
+            torch.Tensor: Dequantized weight tensor (FP16, CPU).
         """
-        raise NotImplementedError(
-            "compute_dequantized_weight() is not implemented in the base class. "
-            "Subclasses should override this method."
-        )
+        if self.dequantized_weight is None:
+            raise NotImplementedError(
+                "compute_dequantized_weight() is not implemented. "
+                "Subclasses must override this method or set dequantized_weight."
+            )
+        # If not overridden, it returns the weight of the dequantized_weight field.
+        return self.dequantized_weight.to(torch.float16).cpu()
 
 
 @dataclass
@@ -283,7 +284,7 @@ class Quantizer(metaclass=ABCMeta):
             input (tuple or torch.Tensor): The input to the layer
             result (QuantizationResult): The quantization result
         """
-        dequantized_weight = result.dequantized_weight
+        dequantized_weight = result.compute_dequantized_weight()
 
         (
             result.output_squared_error,
@@ -541,6 +542,28 @@ class Quantizer(metaclass=ABCMeta):
                 len(self.results),
                 layer_class_name,
             )
+
+    # ========================================
+    # Save config post-processing hook
+    # ========================================
+
+    def finalize_quant_config_for_save(
+        self,
+        quant_config: dict[str, Any],
+        quantized_layer_names: list[str],
+        num_hidden_layers: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Optional hook to augment quantization_config just before saving.
+
+        Runner builds the common fields (e.g. modules_in_block_to_quantize) and then
+        calls this hook so each quantizer can inject method-specific metadata needed
+        by downstream consumers (e.g. vLLM plugins).
+
+        Default implementation is a no-op.
+        """
+        _ = quantized_layer_names
+        _ = num_hidden_layers
+        return quant_config
 
     def save_results(self, filepath):
         """Save the quantization results to a file.

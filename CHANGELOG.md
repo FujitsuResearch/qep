@@ -1,5 +1,134 @@
 # Change log
 
+## [v0.4.3] 2026-03-26
+
+### Implement AutoBit to automatically determine bit-allocation
+
+- Add `AutoBitQuantizer` (`onecomp/quantizer/autobit/_autobit.py`) that automatically assigns optimal bit-width per module using ILP with considering activation-aware error (`onecomp/quantizer/autobit/ilp.py`)  and DBF fallback (`onecomp/quantizer/autobit/dbf_fallback.py`) for ultra-low-bit targets ( <= target bit 2bit) 
+  - [SCIP](https://www.scipopt.org) solver was utilized to solve ILP (`onecomp/quantizer/autobit/ilp.py`)
+  - Sequentially load and forward each layer to collect activation and curvature statistics (`onecomp/quantizer/autobit/activation_stats.py`, `onecomp/utils/blockwise.py`)
+  - Usage example is shown in (`example/example3.py`)
+- Add VRAM auto-estimation utility to derive target bit-width from available GPU memory (`onecomp/utils/vram_estimator.py`)
+
+### VLM and Multi-Architecture Support for Architecture-aware QEP
+
+- Extended `_get_blocks` to detect `language_model` sub-module and restrict block search to the text decoder (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - VLMs (Qwen3-VL, Gemma3, etc.) no longer return vision-encoder blocks
+  - CausalLM behaviour is unchanged (falls back to full-model search)
+- Added `__getattr__` proxy to `Catcher` to forward attribute access to the wrapped module (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - Prevents `AttributeError` when model code reads decoder-layer attributes (e.g. `attention_type`) before `forward()`
+- Changed `get_blocks_and_inputs` to capture block-level kwargs with batch=1 (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - Internally generated kwargs (position_embeddings, attention_mask, etc.) are now batch-size-independent
+  - Avoids shape mismatches when reused with varying batch sizes in downstream functions
+- Added `expand_kwargs_batch` helper to expand batch=1 kwargs via `Tensor.expand` (zero-copy view) (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - Used in `compute_hessian_and_crossterm` and `forward_input` before each block forward call
+  - Resolves failures on models requiring exact batch-dimension matching (e.g. Gemma3 sliding-window attention)
+- Added early termination and group skipping to `run_quantize_with_qep_arch` (`onecomp/qep/_quantize_with_qep_arch.py`)
+  - Groups with no quantization targets are skipped (avoids unnecessary Hessian/cross-term computation)
+  - Block loop exits once all target layers are quantized
+
+### End-to-end CLI tests
+
+- Added `tests/onecomp/test_cli.py`: end-to-end tests that verify `onecomp TinyLlama/...` CLI runs without errors
+  - `test_default_full_run`: full default pipeline (AutoBit + QEP + eval + save) on GPU
+  - Variant tests for individual options (`--wbits`, `--no-qep`, `--total-vram-gb`, `--groupsize`, `--save-dir`, etc.) on CPU
+  - Variant tests are skipped by default; enable with `RUN_CLI_VARIANT_TESTS=1`
+  - Uses `python -m onecomp` to avoid implicit `uv sync` that could modify the environment
+
+### Fixes
+
+- Fixed crash when DBF quantization fails with NaN/Inf (`onecomp/quantizer/dbf/_dbf.py`, `onecomp/qep/_quantize_with_qep_arch.py`)
+  - `_quantize_with_qep_arch.py`: Catch `ValueError`/`NotImplementedError` from `compute_dequantized_weight()`, log the error, and keep QEP-adjusted weights for the failed layer
+- Fixed GemLite import crash when PyTorch version is incompatible (`onecomp/quantizer/gemlite.py`)
+  - Broadened `except ImportError` to `except (ImportError, AttributeError)` so that GemLite gracefully falls back when `torch` lacks newer dtypes (e.g. `float8_e8m0fnu`)
+- Fixed `test_dbf_gemlite.py` to skip when GemLite is unavailable instead of crashing (`tests/vllm-plugins/dbf/test_dbf_gemlite.py`)
+
+### Dependency and documentation updates
+
+- Added `vllm` as an optional dependency (`--extra vllm`) in `pyproject.toml`
+  - Prevents environment corruption caused by `uv pip install vllm` being overwritten by subsequent `uv sync`/`uv run`
+- Added `torchvision` to CUDA extras and `[tool.uv.sources]` in `pyproject.toml` to prevent CUDA version mismatch
+- Updated installation docs to reflect new extras (`README.md`, `docs/getting-started/installation.md`, `docs/user-guide/vllm-inference.md`)
+- Updated `uv.lock`
+
+## [v0.4.2] 2026-03-25
+
+### Unit tests for additional quantizers
+
+- **Added unit tests for QBB, RTN, QUIP, ONEBIT, CQ, ARB, and JOINTQ**
+  - New test modules under `tests/onecomp/quantizer/`: `test_qbb.py`, `test_rtn.py`, `test_quip.py`, `test_onebit.py`, `test_cq.py`, `test_arb.py`, `test_jointq.py`
+  - Shared test base and helpers updated in `tests/onecomp/quantizer/test_module.py`
+  - Quantizer implementations adjusted for test compatibility: `onecomp/quantizer/qbb/`, `onecomp/quantizer/rtn/`, `onecomp/quantizer/quip/`, `onecomp/quantizer/onebit/`, `onecomp/quantizer/arb/`, `onecomp/quantizer/jointq/` (and related `*_impl.py`); minor updates in `onecomp/quantizer/dbf/_dbf.py`, `onecomp/quantizer/gptq/_gptq.py`
+
+### vLLM plugin integration (DBF, Mixed-GPTQ)
+
+- **Added vLLM plugin implementation for DBF and Mixed-GPTQ**
+  - New `vllm_plugins` package: `vllm_plugins/__init__.py`, DBF and GPTQ plugin entry points (`vllm_plugins/dbf/`, `vllm_plugins/gptq/`)
+  - DBF: `vllm_plugins/dbf/vllm_plugin.py` and modules (`vllm_plugins/dbf/modules/gemlite_linear.py`, `vllm_plugins/dbf/modules/naive.py`); shared utilities in `vllm_plugins/utils/module.py`
+  - GPTQ: `vllm_plugins/gptq/vllm_plugin.py` for Mixed-GPTQ inference
+  - Tests: `tests/vllm-plugins/dbf/test_dbf_gemlite.py`, `tests/vllm-plugins/dbf/test_dbf_naive.py`
+  - Package and dependency wiring in `pyproject.toml`
+
+### Fixes
+
+- **Mixed-GPTQ:** raise an error when quantization bit widths differ within the same shard (align with DBF behavior) (`vllm_plugins/gptq/vllm_plugin.py`)
+
+## [v0.4.1] 2026-03-19
+
+### Mixed GPTQ/DBF Save/Load
+
+- **Extended Save/Load for mixed GPTQ and mixed DBF**
+  - `QuantizedModelLoader` now loads models with `quant_method` `mixed_gptq` or `mixed_dbf` (`onecomp/quantized_model_loader.py`)
+  - `effective_method` treats mixed_* as the same tensor format as the base method (gptq/dbf) and resolves per-layer bit-width via `quantization_bits`
+  - Load validates `quant_method`, `quantization_bits`, and `modules_in_block_to_quantize` from `config.json`'s `quantization_config`
+- **GPTQ**
+  - Added `get_quant_config()` to return save-time `quantization_config` with vLLM-compatible keys (`onecomp/quantizer/gptq/_gptq.py`)
+  - Sets `quant_method` to `mixed_gptq` when `module_wbits` or `mlp_wbits` is present
+  - New `onecomp/quantizer/gptq/config.py`: `resolve_gptq_layer_wbits()` resolves per-layer bit-width from `quantization_config` (priority: quantization_bits → module_wbits → mlp_wbits → bits/wbits)
+  - `GPTQLinear`: extended to accept bit-width when restoring from saved state (`onecomp/quantizer/gptq/gptq_layer.py`)
+- **DBF**
+  - Added `get_quant_config()` to return save-time `quantization_config` (`onecomp/quantizer/dbf/_dbf.py`)
+  - New `onecomp/quantizer/dbf/config.py`: `resolve_dbf_layer_bits()` resolves per-layer bit-width from `quantization_config` (priority: quantization_bits → module_target_bits → mlp_target_bits → bits)
+  - `DoubleBinaryLinear`: added argument for target bit-width (for mixed_dbf) (`onecomp/quantizer/dbf/dbf_layer.py`)
+- **Shared**
+  - `onecomp/utils/quant_config.py`: added common helper `get_quant_param()` for `quantization_config` schema (fetch params by alias keys)
+  - `Quantizer.finalize_quant_config_for_save()` hook added; subclasses (GPTQ/DBF) inject method-specific metadata (`onecomp/quantizer/_quantizer.py`)
+  - `runner`: set `quantization_config` when saving (`onecomp/runner.py`)
+
+### Evaluation and benchmark (Runner and accuracy utils)
+
+- **Runner:** unified perplexity/accuracy evaluation via `_calculate_evaluation()` and added optional `dequantized_model` evaluation (`onecomp/runner.py`)
+- **BREAKING: `calculate_perplexity()` / `calculate_accuracy()` now return a 3-tuple `(original, dequantized, quantized)` instead of 2-tuple `(original, quantized)`.** Existing code using `orig, quant = runner.calculate_perplexity()` must be updated to unpack three values. (`onecomp/runner.py`)
+- **BREAKING: `calculate_perplexity()` / `calculate_accuracy()` default for `original_model` changed from `True` to `False`.** To evaluate the original model, pass `original_model=True` explicitly. (`onecomp/runner.py`)
+- **Benchmark:** `benchmark_perplexity()` / `benchmark_accuracy()` now accept `dequantized_model` and `quantized_model` arguments. When `dequantized_model=True`, the result dict includes `"{name}_dequantized"` keys. (`onecomp/runner.py`)
+- **lm_eval:** added helper to create `HFLM` while temporarily disabling `model.config.quantization_config` for compatibility (`onecomp/utils/accuracy.py`)
+
+### Dequantized-weight API and compatibility fixes
+
+- Implemented `compute_dequantized_weight()` for GPTQ and DBF quantizers (`onecomp/quantizer/gptq/_gptq.py`, `onecomp/quantizer/dbf/_dbf.py`)
+- Removed `dequantized_weight` from Result classes and switched call sites to compute it via `compute_dequantized_weight()` (`onecomp/quantizer/_quantizer.py`, `onecomp/runner_methods/*`)
+- Fixed compatibility for quantization methods other than DBF/GPTQ in runner and QEP paths (`onecomp/runner.py`, `onecomp/qep/_quantize_with_qep*.py`)
+- Updated unit tests accordingly (`tests/onecomp/test_qep_general_consistency.py`)
+
+### `auto_run` / CLI improvements
+
+- **`Runner.auto_run()`:** added `eval_original_model` parameter to optionally evaluate the original (unquantized) model's perplexity and accuracy (default: `False`) (`onecomp/runner.py`)
+- **`Runner.auto_run()`:** evaluation now only computes quantized model metrics by default; pass `eval_original_model=True` to include original model metrics
+- **CLI:** added `--eval-original` flag to `onecomp` command (`onecomp/cli.py`)
+
+### GPU memory optimization for model saving
+
+- **`save_quantized_model()` / `save_dequantized_model()`** now load the base model on CPU (`device_map="cpu"`) instead of GPU when building the save artifact (`onecomp/runner.py`). Previously the full original model was loaded onto GPU, which was unnecessary for saving and could cause OOM on memory-constrained setups.
+
+### Bug fix: Architecture-aware QEP group alignment
+
+- Fixed non-deterministic crash in `compute_hessian_and_crossterm` caused by `groups_q` and `groups_f` being ordered differently (`onecomp/qep/_quantize_with_qep_arch.py`). `make_grouped_module` groups modules by tensor identity (`id()` + `data_ptr()`), but after `copy.deepcopy` the CUDA memory allocator can assign different addresses, causing group misalignment between the quantized and full-precision blocks. Now `groups_f` is derived from `groups_q` by module name lookup instead of independent grouping.
+
+### Other fixes in this release
+
+- Refactored runner evaluation paths and fixed benchmark-based evaluation behavior (`onecomp/runner.py`, `onecomp/utils/accuracy.py`)
+- Examples: updated to pass `original_model=True` and `quantized_model=True` explicitly, and to unpack the new triple return value (`example/example1.py`, `example/example2.py`)
+
 ## [v0.4.0] 2026-03-20
 
 ### New Feature: `Runner.auto_run()` Classmethod
@@ -53,6 +182,7 @@
   - Aligns with the base `Quantizer.quantize_layer(self, module, input=None, hessian=None)` signature
   - Enables these quantizers to be used in `Runner(quantizers=[...])` via the chunked quantization path
 - Added `input=None, hessian=None` defaults to `Onebit.quantize_layer` for the same reason
+
 
 ## [v0.3.7] 2026-03-16
 

@@ -5,8 +5,9 @@ Copyright 2025-2026 Fujitsu Ltd.
 Author: Keiji Kimura
 """
 
-import sys
+import logging
 import os
+import sys
 import torch
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -48,6 +49,7 @@ class TestGPTQ(BaseQuantizeSpec):
         {"q_grid": -1, "mse": True},
         {"q_norm": 0.0, "mse": True},
     ]
+    logger = logging.getLogger(__name__)
 
     def check_quantize_layer(
         self,
@@ -89,7 +91,7 @@ class TestGPTQ(BaseQuantizeSpec):
 
     def check_equal_results(self, r1, r2):
         """Validate equality of quantization result objects."""
-        assert torch.equal(r1.dequantized_weight, r2.dequantized_weight)
+        assert torch.equal(r1.compute_dequantized_weight(), r2.compute_dequantized_weight())
         assert torch.equal(r1.qweight, r2.qweight)
         assert torch.equal(r1.scales, r2.scales)
         assert torch.equal(r1.qzeros, r2.qzeros)
@@ -99,9 +101,13 @@ class TestGPTQ(BaseQuantizeSpec):
             assert torch.equal(r1.perm, r2.perm)
 
     def check_quantize_error(self, error, max_error):
-        """Validate that quantization error is within tolerance."""
-        assert error < 0.4
-        assert max_error < 1.71
+        """Validate that quantization error is within tolerance.
+
+        Thresholds are set for FP16 dequantized weights returned by
+        compute_dequantized_weight().
+        """
+        assert error < 0.6
+        assert max_error < 2.5
 
     def check_forward_error(
         self,
@@ -110,7 +116,7 @@ class TestGPTQ(BaseQuantizeSpec):
         max_error_dequantized_vs_applied,
     ):
         """Validate forward errors."""
-        print(
+        self.logger.info(
             "[GPTQ forward error] "
             f"original_vs_gptq(rel={error_original_vs_dequantized:.8f}), "
             f"gptq_vs_gptql(max={max_error_dequantized_vs_applied:.8f}), "
@@ -124,4 +130,5 @@ class TestGPTQ(BaseQuantizeSpec):
 
     def apply_quantized_weights(self, module, result, device):
         """Apply quantized weights to a module."""
-        module.weight.data = result.dequantized_weight.to(device)
+        dtype = module.weight.data.dtype
+        module.weight.data = result.compute_dequantized_weight().to(device).to(dtype)

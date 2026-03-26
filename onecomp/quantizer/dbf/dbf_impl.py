@@ -140,6 +140,9 @@ def run_dbf(  # pylint: disable=too-many-positional-arguments
         use_adaptive_rho=use_adaptive_rho,
     )
 
+    if not results_3_stage.get("is_dbf_quantized", True):
+        return results_3_stage
+
     dbf_A, dbf_B, dbf_mid = _get_dbf_meta_in_op_space(results_3_stage)
 
     # DBF factorization: W ≈ A × diag(mid) × B
@@ -165,7 +168,6 @@ def run_dbf(  # pylint: disable=too-many-positional-arguments
 
     # Save as five-stage representation.
     results_5_stage = {
-        "dequantized_weight": results_3_stage["dequantized_weight"],
         # Stage 0: Input scaling (right singular vector of A).
         "dbf_Da": nn.Parameter(u_A.to(dtype=torch.float16, device="cpu"), requires_grad=False),
         # Stage 1: Binary A matrix.

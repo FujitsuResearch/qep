@@ -21,10 +21,12 @@ Author: Keiji Kimura
 """
 
 from dataclasses import dataclass
-from typing import Dict, Literal, Optional
+import re
+from typing import Any, Dict, Literal, Optional
 
 import torch
 from onecomp.quantizer._quantizer import Quantizer, QuantizationResult
+from onecomp.utils.quant_config import get_quant_param
 
 from .dbf_impl import run_dbf
 
@@ -34,8 +36,6 @@ class DBFResult(QuantizationResult):
     """DBF quantization result.
 
     Attributes:
-        dequantized_weight (torch.Tensor): Dequantized weights (FP16, CPU)
-            - inherited from parent class.
         target_bits (float): Target bit-width (e.g., 1.5).
         iters (int): Optimization iterations.
         reg (float): Regularization coefficient.
@@ -74,6 +74,37 @@ class DBFResult(QuantizationResult):
     dbf_B: Optional[torch.Tensor] = None  # Binary B matrix (mid_dim, in_dim)
     dbf_Db: Optional[torch.Tensor] = None  # Scaling vector paired with B (in_dim,)
 
+    def compute_dequantized_weight(self, device=None) -> torch.Tensor:
+        """Compute dequantized weight from quantized data and quantization parameters.
+
+        Args:
+            device (str or torch.device, optional): Device to compute on.
+
+        Returns:
+            Dequantized weight tensor (FP16, CPU).
+        """
+        if (
+            self.dbf_Da is None
+            or self.dbf_A is None
+            or self.dbf_mid is None
+            or self.dbf_B is None
+            or self.dbf_Db is None
+        ):
+            raise ValueError("DBFResult is missing required data for dequantization")
+
+        compute_device = torch.device(device) if device is not None else torch.device("cpu")
+        Da = self.dbf_Da.float().to(compute_device)  # (out_dim,)
+        A = self.dbf_A.float().to(compute_device)  # (out_dim, mid_dim)
+        mid = self.dbf_mid.float().to(compute_device)  # (mid_dim,)
+        B = self.dbf_B.float().to(compute_device)  # (mid_dim, in_dim)
+        Db = self.dbf_Db.float().to(compute_device)  # (in_dim,)
+
+        # W = diag(Da) @ A @ diag(mid) @ B @ diag(Db)
+        # Derived from DoubleBinaryLinear.forward():
+        #   y = ((x * Db) @ B.T * mid) @ A.T * Da
+        W = Da[:, None] * (A @ (mid[:, None] * B)) * Db[None, :]
+        return W.to(torch.float16).cpu()
+
 
 @dataclass
 class DBF(Quantizer):
@@ -109,9 +140,36 @@ class DBF(Quantizer):
     balance_alpha: float = 1.0
     balance_mode: str = "l1"
     use_adaptive_rho: bool = True
+    mlp_target_bits: Optional[float] = None
+    module_target_bits: Optional[dict[str, float]] = None
+
+    @staticmethod
+    def resolve_bits(
+        layer_name: Optional[str],
+        default_bits: float,
+        mlp_bits: Optional[float] = None,
+        module_bits: Optional[dict[str, float]] = None,
+    ) -> float:
+        """Resolve bit-width from overrides (DBF semantics: module > mlp > default).
+
+        Used by the quantizer and by config loader. If layer_name is None, returns default_bits.
+        Does not validate range; caller may validate.
+        """
+        if module_bits and layer_name is not None:
+            b = module_bits.get(layer_name)
+            if b is not None:
+                return b
+        if mlp_bits is not None and layer_name is not None and "mlp" in layer_name:
+            return mlp_bits
+        return default_bits
+
+    def __post_init__(self):
+        if self.name is None:
+            self.name = f"DBF_{self.target_bits:g}bit"
+        super().__post_init__()
 
     def validate_params(self):
-        """Validate DBF parameters once at quantizer initialization."""
+        """Validate DBF parameters once in setup()."""
         bad = []
 
         if (
@@ -139,6 +197,30 @@ class DBF(Quantizer):
                 f"Invalid DBF parameter 'balance_alpha': {self.balance_alpha!r} (expected numeric >= 1.0)"
             )
 
+        if self.mlp_target_bits is not None:
+            if not (
+                isinstance(self.mlp_target_bits, (int, float)) and self.mlp_target_bits >= 1.0
+            ):
+                bad.append(
+                    f"Invalid DBF parameter 'mlp_target_bits': {self.mlp_target_bits!r} (expected numeric >= 1.0)"
+                )
+
+        if self.module_target_bits is not None:
+            if not isinstance(self.module_target_bits, dict):
+                bad.append(
+                    f"Invalid DBF parameter 'module_target_bits': must be a dict[str, float], got {type(self.module_target_bits).__name__!r}"
+                )
+            else:
+                for layer_name, bits in self.module_target_bits.items():
+                    if not isinstance(layer_name, str):
+                        bad.append(
+                            "Invalid DBF parameter 'module_target_bits': keys must be layer name strings."
+                        )
+                    elif not (isinstance(bits, (int, float)) and bits >= 1.0):
+                        bad.append(
+                            f"Invalid DBF parameter 'module_target_bits[{layer_name!r}]': {bits!r} (expected numeric >= 1.0)"
+                        )
+
         if bad:
             raise ValueError("; ".join(bad))
 
@@ -159,11 +241,19 @@ class DBF(Quantizer):
             DBFResult: DBF quantization result object containing quantized weights and parameters.
         """
 
+        layer_name = self.module_to_name.get(module)
+        resolved_target_bits = DBF.resolve_bits(
+            layer_name,
+            self.target_bits,
+            self.mlp_target_bits,
+            self.module_target_bits,
+        )
+
         # Quantize the layer
         weight_results = run_dbf(
             hessian,
             module,
-            target_bits=self.target_bits,
+            target_bits=resolved_target_bits,
             iters=self.iters,
             reg=self.reg,
             use_balancing=self.use_balancing,
@@ -175,7 +265,7 @@ class DBF(Quantizer):
 
         dbf_result = DBFResult(
             # DBF quantization parameters
-            target_bits=self.target_bits,
+            target_bits=resolved_target_bits,
             iters=self.iters,
             reg=self.reg,
             use_balancing=self.use_balancing,
@@ -184,20 +274,22 @@ class DBF(Quantizer):
             balance_mode=self.balance_mode,
             use_adaptive_rho=self.use_adaptive_rho,
             # DBF weight reconstruction data
-            dequantized_weight=weight_results["dequantized_weight"],
-            is_dbf_quantized=weight_results["is_dbf_quantized"],
-            dbf_Da=weight_results["dbf_Da"],
-            dbf_A=weight_results["dbf_A"],
-            dbf_mid=weight_results["dbf_mid"],
-            dbf_B=weight_results["dbf_B"],
-            dbf_Db=weight_results["dbf_Db"],
+            is_dbf_quantized=weight_results.get("is_dbf_quantized", False),
+            dbf_Da=weight_results.get("dbf_Da"),
+            dbf_A=weight_results.get("dbf_A"),
+            dbf_mid=weight_results.get("dbf_mid"),
+            dbf_B=weight_results.get("dbf_B"),
+            dbf_Db=weight_results.get("dbf_Db"),
         )
 
         return dbf_result
 
     def get_quant_config(self) -> dict:
-        """Return quantization_config dict for save_quantized_model."""
-        return {
+        """Return quantization_config dict for save_quantized_model.
+
+        Structure: all keys at top-level (quant_method, bits, iters, reg, etc.).
+        """
+        result: dict[str, Any] = {
             "quant_method": "dbf",
             "bits": self.target_bits,
             "iters": self.iters,
@@ -208,6 +300,71 @@ class DBF(Quantizer):
             "balance_mode": self.balance_mode,
             "use_adaptive_rho": self.use_adaptive_rho,
         }
+        if self.mlp_target_bits is not None:
+            result["mlp_target_bits"] = self.mlp_target_bits
+        if self.module_target_bits:
+            result["module_target_bits"] = dict(self.module_target_bits)
+        return result
+
+    @staticmethod
+    def _build_quantization_bits(
+        quantized_names: list[str],
+        quant_config: dict[str, Any],
+        num_layers: int,
+    ) -> list[dict[str, Any]]:
+        """Build per-layer quantization_bits list; length is num_layers (model's total layer count)."""
+        _LAYER_RE = re.compile(r"\.layers\.(\d+)\.(.*)")
+        default_bits = quant_config.get("bits", 1.5)
+        mlp_target_bits = get_quant_param(quant_config, "mlp_target_bits")
+        module_target_bits: dict[str, float] = (
+            get_quant_param(quant_config, "module_target_bits") or {}
+        )
+        params: dict[str, Any] = {
+            "iters": get_quant_param(quant_config, "iters", default=600),
+            "reg": get_quant_param(quant_config, "reg", default=3e-2),
+            "use_balancing": get_quant_param(quant_config, "use_balancing", default=True),
+            "balance_iters": get_quant_param(quant_config, "balance_iters", default=40),
+            "balance_alpha": get_quant_param(quant_config, "balance_alpha", default=1.0),
+            "balance_mode": get_quant_param(quant_config, "balance_mode", default="l1"),
+            "use_adaptive_rho": get_quant_param(quant_config, "use_adaptive_rho", default=True),
+        }
+
+        layer_modules: dict[int, dict[str, Any]] = {}
+        for name in quantized_names:
+            m = _LAYER_RE.search(name)
+            if m is None:
+                continue
+            layer_idx = int(m.group(1))
+            suffix = m.group(2)
+
+            bits = DBF.resolve_bits(name, default_bits, mlp_target_bits, module_target_bits)
+
+            layer_modules.setdefault(layer_idx, {})[suffix] = {
+                "bits": bits,
+                "method": "dbf",
+                "params": params,
+            }
+
+        if not layer_modules:
+            return []
+
+        return [layer_modules.get(i, {}) for i in range(num_layers)]
+
+    def finalize_quant_config_for_save(
+        self,
+        quant_config: dict[str, Any],
+        quantized_layer_names: list[str],
+        num_hidden_layers: Optional[int] = None,
+    ) -> dict[str, Any]:
+        if num_hidden_layers is None:
+            raise ValueError(
+                "num_hidden_layers is required for DBF quantization_bits "
+                "(Runner passes model.config.num_hidden_layers)"
+            )
+        quant_config["quantization_bits"] = DBF._build_quantization_bits(
+            quantized_layer_names, quant_config, num_hidden_layers
+        )
+        return quant_config
 
     def create_inference_layer(self, result, linear_module, **kwargs):
         """Build DoubleBinaryLinear from DBFResult."""

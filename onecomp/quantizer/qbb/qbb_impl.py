@@ -291,7 +291,7 @@ def run_qbb(  # pylint: disable=too-many-positional-arguments
         dequantized_weight = Q.reshape(layer.weight.shape).to(layer.weight.data.dtype).cpu()
         quantized_weight_list = [B_int.reshape(layer.weight.shape).cpu() for B_int in B_int_list]
 
-    alpha_list_cpu = [alpha.cpu() for alpha in alpha_list]
+    alpha_list_cpu = [alpha.detach().to(dtype=torch.float16, device="cpu") for alpha in alpha_list]
 
     del W, Q, B_list, B_int_list
     gc.collect()

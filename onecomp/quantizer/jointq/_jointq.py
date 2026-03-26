@@ -23,7 +23,6 @@ class JointQResult(QuantizationResult):
     Inherits from QuantizationResult and adds JointQ-specific parameters.
 
     Attributes:
-        dequantized_weight: Dequantized weight (FP16, CPU) - inherited from parent class
 
         [Quantization configuration parameters]
         bits: Number of quantization bits
@@ -67,7 +66,7 @@ class JointQResult(QuantizationResult):
                 If None, computation is performed on the device where the quantization parameters reside.
 
         Returns:
-            torch.Tensor: Dequantized weight, shape (out_features, in_features)
+            torch.Tensor: Dequantized weight tensor (FP16), shape (out_features, in_features)
 
         """
         # If a device is specified, compute on that device
@@ -98,7 +97,7 @@ class JointQResult(QuantizationResult):
         # Reshape to (out_features, num_groups * group_size) = (out_features, in_features)
         dequantized_weight = dequantized.reshape(out_features, -1)
 
-        return dequantized_weight
+        return dequantized_weight.to(torch.float16).cpu()
 
 
 @dataclass
@@ -189,6 +188,62 @@ class JointQ(Quantizer):
     ils_num_clones: int = 8
     ils_num_channels: Optional[int] = None
 
+    def validate_params(self):
+        """Validate JointQ parameters once in setup().
+
+        Validated ranges:
+            bits: int >= 1
+            group_size: int >= 1
+            batch_size: int >= 0
+            log_level: int in {0, 1, 2}
+            ils_num_iterations: int >= 1 (when ils_enabled=True)
+            ils_num_clones: int >= 1 (when ils_enabled=True)
+            ils_num_channels: int >= 1 or None (when ils_enabled=True)
+        """
+        bad = []
+
+        if not (isinstance(self.bits, int) and self.bits >= 1):
+            bad.append(f"Invalid JointQ parameter 'bits': {self.bits!r} (expected int >= 1).")
+
+        if not (isinstance(self.group_size, int) and self.group_size >= 1):
+            bad.append(
+                f"Invalid JointQ parameter 'group_size': {self.group_size!r} (expected int >= 1)."
+            )
+
+        if self.batch_size is not None and not (
+            isinstance(self.batch_size, int) and self.batch_size >= 0
+        ):
+            bad.append(
+                f"Invalid JointQ parameter 'batch_size': {self.batch_size!r} (expected int >= 0 or None)."
+            )
+
+        if not (isinstance(self.log_level, int) and 0 <= self.log_level <= 2):
+            bad.append(
+                f"Invalid JointQ parameter 'log_level': {self.log_level!r} (expected int in 0..2)."
+            )
+
+        if self.ils_enabled:
+            if not (isinstance(self.ils_num_iterations, int) and self.ils_num_iterations >= 1):
+                bad.append(
+                    f"Invalid JointQ parameter 'ils_num_iterations': {self.ils_num_iterations!r} "
+                    f"(expected int >= 1 when ILS is enabled)."
+                )
+            if not (isinstance(self.ils_num_clones, int) and self.ils_num_clones >= 1):
+                bad.append(
+                    f"Invalid JointQ parameter 'ils_num_clones': {self.ils_num_clones!r} "
+                    f"(expected int >= 1 when ILS is enabled)."
+                )
+            if self.ils_num_channels is not None and not (
+                isinstance(self.ils_num_channels, int) and self.ils_num_channels >= 1
+            ):
+                bad.append(
+                    f"Invalid JointQ parameter 'ils_num_channels': {self.ils_num_channels!r} "
+                    f"(expected int >= 1 or None when ILS is enabled)."
+                )
+
+        if bad:
+            raise ValueError("; ".join(bad))
+
     def quantize_layer(
         self, module, input=None, hessian=None, matrix_XX=None, dim_n=None
     ):  # pylint: disable=redefined-builtin, too-many-arguments, too-many-positional-arguments
@@ -273,20 +328,11 @@ class JointQ(Quantizer):
             **ils_kwargs,
         )
 
-        # Get dequantized weight
-        dequantized_weight = solution.get_dequantized_weight_matrix()
-
-        # Return the dequantized weight in the same shape and dtype as the original
-        dequantized_weight = (
-            dequantized_weight.reshape(module.weight.shape).to(module.weight.data.dtype).cpu()
-        )
-
         # Get quantized result (scale, assignment, zero_point)
         scale, assignment, zero_point = solution.get_quantized_result()
 
         # Create and return JointQResult object
         return JointQResult(
-            dequantized_weight=dequantized_weight,
             bits=self.bits,
             symmetric=self.symmetric,
             group_size=self.group_size,
